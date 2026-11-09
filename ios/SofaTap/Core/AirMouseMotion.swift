@@ -98,6 +98,18 @@ enum AirMouseGain {
         return min(maximumSweepDegrees, max(minimumSweepDegrees, value))
     }
 
+    /// Slider position uses the same 15...120 range as sweep degrees, but the
+    /// ends are reversed: the left end is slow (more wrist for the same travel)
+    /// and the right end is fast (fewer degrees to cross the display).
+    static func sensitivitySliderPosition(sweepDegrees: Double) -> Double {
+        maximumSweepDegrees + minimumSweepDegrees - clampSweep(sweepDegrees)
+    }
+
+    static func sweepDegrees(sensitivitySliderPosition position: Double) -> Double {
+        let clamped = min(maximumSweepDegrees, max(minimumSweepDegrees, position.isFinite ? position : sensitivitySliderPosition(sweepDegrees: defaultSweepDegrees)))
+        return clampSweep(maximumSweepDegrees + minimumSweepDegrees - clamped)
+    }
+
     static func clampWidth(_ value: Double) -> Double {
         guard value.isFinite, value >= 1 else { return nominalLogicalWidth }
         return min(16_384, value)
@@ -228,11 +240,16 @@ struct AirMouseTracker {
 
     /// Point deltas since the last emitted pose. Zero unless a hold is active
     /// and the pointer is not frozen for a tap. +x is right, +y is down.
+    ///
+    /// The trackpad sends UIKit deltas, so a finger moving up is negative dy.
+    /// The Mac receiver adds dy to Quartz's global display Y, which grows
+    /// downward (a display above the main display has a smaller Y). Raising
+    /// the top of the phone increases pitch, so that delta is negated.
     mutating func consume() -> (dx: Double, dy: Double) {
         guard holding, !frozen, seeded else { return (0, 0) }
         let gain = AirMouseGain.pointsPerRadian(logicalWidth: logicalWidth, sweepDegrees: sweepDegrees)
         let dx = -(yaw - emittedYaw) * gain
-        let dy = (pitch - emittedPitch) * gain
+        let dy = -(pitch - emittedPitch) * gain
         emittedYaw = yaw
         emittedPitch = pitch
         guard dx.isFinite, dy.isFinite else { return (0, 0) }

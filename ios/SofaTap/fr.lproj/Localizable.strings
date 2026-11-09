@@ -507,6 +507,9 @@
 "暂时入口" = "Entrée temporaire";
 "回中" = "Recentrer";
 "按住石子移动光标，松手立刻停止。轻点单击。" = "Maintiens le galet pour déplacer le pointeur. Relâche pour arrêter. Un tap court clique.";
-"扫过所选屏幕宽度" = "Balayer la largeur de l'écran choisi";
 "选择电视屏幕" = "Choisir l'écran du téléviseur";
 "主屏幕" = "Écran principal";
+"灵敏度" = "Sensibilité";
+"慢" = "Lent";
+"快" = "Rapide";
+"手腕转一点，光标走多远" = "La distance parcourue par le pointeur pour un petit mouvement du poignet";

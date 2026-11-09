@@ -50,21 +50,26 @@ struct AirMouseView: View {
             }
             displayPicker
             VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text(String(localized: "扫过所选屏幕宽度"))
-                        .font(.subheadline.weight(.semibold))
-                    Spacer()
-                    Text(verbatim: "\(Int(model.airMouseSweepDegrees.rounded()))°")
-                        .font(.subheadline.monospacedDigit())
-                        .foregroundStyle(Palette.mint)
-                }
+                Text(String(localized: "灵敏度"))
+                    .font(.subheadline.weight(.semibold))
                 Slider(value: Binding(
-                    get: { model.airMouseSweepDegrees },
-                    set: { model.setAirMouseSweepDegrees($0) }
+                    get: { AirMouseGain.sensitivitySliderPosition(sweepDegrees: model.airMouseSweepDegrees) },
+                    set: { model.setAirMouseSweepDegrees(AirMouseGain.sweepDegrees(sensitivitySliderPosition: $0)) }
                 ), in: AirMouseGain.minimumSweepDegrees...AirMouseGain.maximumSweepDegrees, step: 1)
                 .tint(Palette.mint)
-                .accessibilityLabel(String(localized: "扫过所选屏幕宽度"))
-                .accessibilityValue(Text(verbatim: "\(Int(model.airMouseSweepDegrees.rounded()))°"))
+                .accessibilityLabel(String(localized: "灵敏度"))
+                .accessibilityHint(String(localized: "手腕转一点，光标走多远"))
+                HStack {
+                    Text(String(localized: "慢"))
+                    Spacer()
+                    Text(String(localized: "快"))
+                }
+                .font(.caption)
+                .foregroundStyle(Palette.muted)
+                .accessibilityHidden(true)
+                Text(String(localized: "手腕转一点，光标走多远"))
+                    .font(.caption)
+                    .foregroundStyle(Palette.muted)
             }
             .padding(16)
             .background(Palette.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))

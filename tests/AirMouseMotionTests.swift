@@ -55,6 +55,17 @@ struct AirMouseMotionTests {
                 == AirMouseGain.pointsPerRadian(logicalWidth: 1920, sweepDegrees: 45))
         check("sweep limits stay inside 15 to 120 degrees",
               AirMouseGain.clampSweep(1) == 15 && AirMouseGain.clampSweep(400) == 120 && AirMouseGain.clampSweep(.nan) == 45)
+        let slow = AirMouseGain.minimumSweepDegrees
+        let fast = AirMouseGain.maximumSweepDegrees
+        check("the slow end of the slider needs the most wrist",
+              AirMouseGain.sweepDegrees(sensitivitySliderPosition: slow) == fast)
+        check("the fast end of the slider needs the least wrist",
+              AirMouseGain.sweepDegrees(sensitivitySliderPosition: fast) == slow)
+        check("moving the slider toward fast shortens the sweep",
+              AirMouseGain.sweepDegrees(sensitivitySliderPosition: 90) < AirMouseGain.sweepDegrees(sensitivitySliderPosition: 40))
+        check("sensitivity position round-trips the default sweep",
+              AirMouseGain.sensitivitySliderPosition(sweepDegrees: 45) == 90
+                && AirMouseGain.sweepDegrees(sensitivitySliderPosition: 90) == 45)
     }
 
     static func attitudeChecks(_ check: (String, Bool) -> Void) {
@@ -98,7 +109,7 @@ struct AirMouseMotionTests {
             let pitch = min(0.4, 0.4 * Double(step) / 18)
             let outputs = held.update(sample(time: Double(step) / 60, pitch: pitch))
             let dy = travel(outputs)
-            if held.isMoving, started == nil, let pose = posePitch(outputs) { started = pose - dy / gain }
+            if held.isMoving, started == nil, let pose = posePitch(outputs) { started = pose + dy / gain }
             moved += dy
             if let pose = posePitch(outputs) { endPitch = pose }
         }
@@ -106,9 +117,9 @@ struct AirMouseMotionTests {
         check("release is not a click once the hold has started", !release.contains(.click))
         check("release does not add another jump", travel(release) == 0)
         if let started {
-            check("travel after the press equals the post-compensation pitch",
-                  abs(moved - (endPitch - started) * gain) < 1.5)
-            check("the press tilt itself is removed", moved < 0.4 * gain - 20 && moved > 0)
+            check("travel after the press equals the negated post-compensation pitch",
+                  abs(moved + (endPitch - started) * gain) < 1.5)
+            check("the press tilt itself is removed", moved > -(0.4 * gain - 20) && moved < 0)
         } else {
             check("hold became active", false)
         }
@@ -150,8 +161,12 @@ struct AirMouseMotionTests {
         var aim = prepared()
         _ = aim.begin(sample(time: 0, pitch: 0))
         _ = aim.update(sample(time: 0.2, pitch: 0))
-        let raised = travel(aim.update(sample(time: 0.25, pitch: -0.1)))
-        check("aiming up moves the pointer up", raised < -0.05 * gain)
+        // UIKit and Quartz global display Y both grow downward. An upward
+        // trackpad swipe is negative dy, and MacInput adds dy to cursor Y, so
+        // negative dy moves the pointer up. Raising the top of the phone
+        // increases measured pitch; that delta is negated.
+        let raised = travel(aim.update(sample(time: 0.25, pitch: 0.1)))
+        check("raising the phone top sends negative dy, like an upward trackpad swipe", raised < -0.05 * gain)
 
         var center = prepared()
         _ = center.begin(sample(time: 0, pitch: 0))
@@ -160,7 +175,7 @@ struct AirMouseMotionTests {
         center.recenter()
         let same = travel(center.update(sample(time: 0.3, pitch: 0.2)))
         let next = travel(center.update(sample(time: 0.35, pitch: 0.3)))
-        check("recenter makes the current pose the origin", abs(same) < 1 && abs(next - 0.1 * gain) < 3)
+        check("recenter makes the current pose the origin", abs(same) < 1 && abs(next + 0.1 * gain) < 3)
 
         var wide = prepared(width: 3840, height: 100)
         var tall = prepared(width: 1920, height: 4000)
@@ -171,7 +186,7 @@ struct AirMouseMotionTests {
         let wideTravel = travel(wide.update(sample(time: 0.25, pitch: 0.1)))
         let tallTravel = travel(tall.update(sample(time: 0.25, pitch: 0.1)))
         check("logical width changes the gain and height does not",
-              abs(wideTravel - tallTravel * 2) < 3 && abs(tallTravel - 0.1 * AirMouseGain.pointsPerRadian(logicalWidth: 1920, sweepDegrees: 45)) < 3)
+              abs(wideTravel - tallTravel * 2) < 3 && abs(tallTravel + 0.1 * AirMouseGain.pointsPerRadian(logicalWidth: 1920, sweepDegrees: 45)) < 3)
 
         var paused = prepared()
         _ = paused.begin(sample(time: 0, pitch: 0))

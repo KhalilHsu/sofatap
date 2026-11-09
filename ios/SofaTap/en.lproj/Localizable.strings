@@ -511,6 +511,9 @@
 "暂时入口" = "Temporary entry";
 "回中" = "Recenter";
 "按住石子移动光标，松手立刻停止。轻点单击。" = "Hold the pebble to move the pointer. Release to stop. A quick tap clicks.";
-"扫过所选屏幕宽度" = "Sweep across the selected display";
 "选择电视屏幕" = "Choose the TV display";
 "主屏幕" = "Main display";
+"灵敏度" = "Sensitivity";
+"慢" = "Slow";
+"快" = "Fast";
+"手腕转一点，光标走多远" = "How far the pointer moves when your wrist turns a little";

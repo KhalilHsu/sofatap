@@ -507,6 +507,9 @@
 "暂时入口" = "Vorläufiger Einstieg";
 "回中" = "Zentrieren";
 "按住石子移动光标，松手立刻停止。轻点单击。" = "Halte den Stein, um den Zeiger zu bewegen. Loslassen stoppt sofort. Kurzes Tippen klickt.";
-"扫过所选屏幕宽度" = "Breite des gewählten Bildschirms überstreichen";
 "选择电视屏幕" = "TV-Bildschirm wählen";
 "主屏幕" = "Hauptbildschirm";
+"灵敏度" = "Empfindlichkeit";
+"慢" = "Langsam";
+"快" = "Schnell";
+"手腕转一点，光标走多远" = "Wie weit der Zeiger bei einer kleinen Drehung des Handgelenks wandert";

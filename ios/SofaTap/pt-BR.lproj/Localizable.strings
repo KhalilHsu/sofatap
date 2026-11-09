@@ -507,6 +507,9 @@
 "暂时入口" = "Entrada temporária";
 "回中" = "Centralizar";
 "按住石子移动光标，松手立刻停止。轻点单击。" = "Segure a pedra para mover o ponteiro. Solte para parar. Um toque rápido clica.";
-"扫过所选屏幕宽度" = "Varrer a largura da tela escolhida";
 "选择电视屏幕" = "Escolher a tela da TV";
 "主屏幕" = "Tela principal";
+"灵敏度" = "Sensibilidade";
+"慢" = "Lento";
+"快" = "Rápido";
+"手腕转一点，光标走多远" = "O quanto o ponteiro anda quando o pulso gira um pouco";

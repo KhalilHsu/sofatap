@@ -507,6 +507,9 @@
 "暂时入口" = "Pintu masuk sementara";
 "回中" = "Ke tengah";
 "按住石子移动光标，松手立刻停止。轻点单击。" = "Tahan batu untuk menggerakkan penunjuk. Lepas untuk berhenti. Ketukan singkat mengeklik.";
-"扫过所选屏幕宽度" = "Menyapu lebar layar yang dipilih";
 "选择电视屏幕" = "Pilih layar TV";
 "主屏幕" = "Layar utama";
+"灵敏度" = "Sensitivitas";
+"慢" = "Lambat";
+"快" = "Cepat";
+"手腕转一点，光标走多远" = "Seberapa jauh penunjuk bergerak saat pergelangan tangan berputar sedikit";
