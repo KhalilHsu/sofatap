@@ -5,7 +5,8 @@ namespace SofaTap;
 
 public sealed record ActionMessage(string Id, string Type, double Dx = 0, double Dy = 0,
     string? Button = null, bool Down = false, string? Key = null, string[]? Modifiers = null, string? Text = null,
-    string? Session = null, int Revision = 0, int SelectionStart = 0, int SelectionLength = 0, string? Command = null);
+    string? Session = null, int Revision = 0, int SelectionStart = 0, int SelectionLength = 0, string? Command = null,
+    string? Display = null);
 public sealed record ActionAck(string Type, string Id, bool Ok, string? Error = null, LiveTextSnapshot? LiveText = null)
 {
     public static ActionAck Success(string id) => new("ack", id, true);
@@ -43,6 +44,7 @@ public static class Protocol
             "textBegin" => ["id", "type"],
             "textEnd" => ["id", "type", "session"],
             "textSync" => ["id", "type", "session", "revision", "text", "selectionStart", "selectionLength"],
+            "center" or "selectDisplay" => ["id", "type", "display"],
             "ping" => ["id", "type"],
             _ => throw new ProtocolException("Unsupported action type.")
         };
@@ -54,6 +56,8 @@ public static class Protocol
                 var command = String(fields, "command");
                 if (command is not ("up" or "down" or "mute")) throw new ProtocolException("Unsupported volume command.");
                 return new(id, type, Command: command);
+            case "center": case "selectDisplay":
+                return new(id, type, Display: DisplayId(fields));
             case "textEnd":
                 return new(id, type, Session: Session(fields));
             case "textSync":
@@ -114,6 +118,12 @@ public static class Protocol
         if (!fields.TryGetValue(key, out var item) || item.ValueKind != JsonValueKind.String) throw new ProtocolException($"Missing or invalid {key}.");
         try { return item.GetString()!; }
         catch (InvalidOperationException) { throw new ProtocolException("Invalid JSON string."); }
+    }
+    private static string DisplayId(Dictionary<string, JsonElement> fields)
+    {
+        var value = String(fields, "display");
+        if (!MacDisplayGeometry.ValidId(value)) throw new ProtocolException("Invalid display id.");
+        return value;
     }
     private static string Session(Dictionary<string, JsonElement> fields)
     {

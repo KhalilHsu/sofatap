@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using SofaTap;
 
 var passed = 0;
@@ -109,6 +110,20 @@ Reject(Message("\"type\":\"key\",\"key\":\"a\",\"modifiers\":[\"ctrl\",\"ctrl\"]
 Reject(Message("\"type\":\"key\",\"key\":\"a\",\"modifiers\":[\"meta\"]"), "unsupported modifier");
 Reject(Message("\"type\":\"ping\"", "invalid"), "malformed UUID");
 Reject(Message("\"type\":\"exec\",\"command\":\"calc\""), "executable command");
+Check(Parse(Message("\"type\":\"center\",\"display\":\"42\"")).Display == "42", "center names a display");
+Check(Parse(Message("\"type\":\"selectDisplay\",\"display\":\"7\"")).Type == "selectDisplay", "selectDisplay parses");
+Reject(Message("\"type\":\"center\""), "center requires a display");
+Reject(Message("\"type\":\"center\",\"display\":\"01\""), "padded display id");
+Reject(Message("\"type\":\"center\",\"display\":\"42\",\"dx\":1"), "unknown center field");
+Reject(Message("\"type\":\"selectDisplay\",\"display\":\"abc\""), "nonnumeric display id");
+try { LinuxInput.SerializeAction(new("", "center", Display: "1")); throw new Exception("FAIL: linux center forwarded"); }
+catch (InputInjectionException error) { Check(error.Message.StartsWith("input_failed:"), "Linux does not forward display centering"); }
+try { new WindowsInput().Apply(new(Guid.NewGuid().ToString("D"), "center", Display: "1")); throw new Exception("FAIL: windows center accepted"); }
+catch (InputInjectionException error)
+{
+    Check(error.Message.StartsWith("input_unavailable:", StringComparison.Ordinal) || error.Message.StartsWith("invalid_message:", StringComparison.Ordinal),
+        "Windows does not warp the pointer for a display center request");
+}
 Reject(Message("\"type\":\"text\",\"text\":" + JsonSerializer.Serialize(new string('x', 16001))), "text overflow");
 Reject(Message("\"type\":\"text\",\"text\":\"\\uD800\""), "unpaired surrogate");
 Reject(Message("\"type\":\"text\",\"text\":\"\\u0000\""), "NUL text");
@@ -186,6 +201,85 @@ mac.Apply(new("", "scroll", Dx: .7, Dy: -.7)); mac.Apply(new("", "scroll", Dx: .
 Check(macSink.Events[^1] is { Kind: MacEventKind.Scroll, DeltaX: 1, DeltaY: -1 }, "Mac both scroll axes preserve signed fractional deltas");
 Check(MacInput.ClampToDisplays(new(210, 50), [new(0, 0, 100, 100), new(300, 0, 100, 100)]) == new MacPoint(300, 50),
     "Mac pointer in a monitor gap chooses the nearest real display rather than an invalid bounding-box point");
+
+var television = new MacDisplayInfo("42", new(0, 0, 1920, 1080), 2, false);
+var builtIn = new MacDisplayInfo("7", new(-1512, -200, 1512, 982), 2, true);
+Check(MacDisplayGeometry.TryCenter([builtIn, television], "42", out var tvCenter) && tvCenter == new MacPoint(960, 540),
+    "center uses the selected TV display, not the main display");
+Check(MacDisplayGeometry.TryCenter([builtIn, television], "7", out var mainCenter) && mainCenter.X == -756 && mainCenter.Y == 291,
+    "main-display center keeps coordinates left of and above the global origin");
+Check(!MacDisplayGeometry.TryCenter([television], "99", out _), "unknown display has no center");
+Check(MacDisplayGeometry.Capability([new("01", new(0, 0, 10, 10), 1, true)]) is null, "padded display ids are rejected");
+Check(MacDisplayGeometry.Capability([television, new("8", new(0, 0, 10, 10), 1, true), new("9", new(0, 0, 10, 10), 1, true)]) is null,
+    "two main displays are not advertised");
+var advertised = JsonSerializer.SerializeToElement(MacDisplayGeometry.Capability([builtIn, television]), LiveTextWire.Options);
+Check(advertised.GetProperty("version").GetInt32() == 1 && advertised.GetProperty("displays").GetArrayLength() == 2, "display capability version");
+var advertisedTv = advertised.GetProperty("displays")[1];
+Check(advertisedTv.GetProperty("id").GetString() == "42" && advertisedTv.GetProperty("width").GetInt32() == 1920
+    && advertisedTv.GetProperty("height").GetInt32() == 1080 && advertisedTv.GetProperty("scale").GetDouble() == 2
+    && !advertisedTv.GetProperty("isMain").GetBoolean(), "wire display carries logical size, scale and main flag");
+var helloWithDisplays = JsonSerializer.SerializeToElement(ReceiverServer.CreateHello("Mac", "macos", false, "ready",
+    new("unknown", 0), display: MacDisplayGeometry.Capability([television])), LiveTextWire.Options);
+Check(helloWithDisplays.GetProperty("display").GetProperty("displays")[0].GetProperty("id").GetString() == "42",
+    "Mac hello can include the display catalog");
+var helloWithoutDisplays = JsonSerializer.SerializeToElement(ReceiverServer.CreateHello("PC", "windows", false, "ready", new("unknown", 0)), LiveTextWire.Options);
+Check(!helloWithoutDisplays.TryGetProperty("display", out _), "receivers without a catalog omit display");
+var omittedPing = ReceiverServer.StatusPayload(ActionAck.Success(Guid.NewGuid().ToString("D")), "ready", false,
+    new("unknown", 0), false, new(false, false, []));
+Check(!omittedPing.ContainsKey("display"), "non-Mac ping omits display so the phone keeps its list");
+var emptyPing = ReceiverServer.StatusPayload(ActionAck.Success(Guid.NewGuid().ToString("D")), "ready", false,
+    new("unknown", 0), false, new(true, true, []));
+Check(emptyPing.ContainsKey("display") && emptyPing["display"] is null, "an empty Mac catalog revokes centering");
+var freshPing = ReceiverServer.StatusPayload(ActionAck.Success(Guid.NewGuid().ToString("D")), "ready", false,
+    new("unknown", 0), true, new(true, true, [television]));
+Check(freshPing["display"]?["version"]?.GetValue<int>() == 1 && freshPing["systemVolume"]?["version"]?.GetValue<int>() == 1,
+    "Mac ping refreshes displays without dropping volume metadata");
+var roundedWidth = JsonSerializer.SerializeToElement(MacDisplayGeometry.Capability([new("3", new(0, 0, 1919.6, 10.2), 1, true)]), LiveTextWire.Options);
+Check(roundedWidth.GetProperty("displays")[0].GetProperty("width").GetInt32() == 1920
+    && roundedWidth.GetProperty("displays")[0].GetProperty("height").GetInt32() == 10,
+    "logical size rounds to the nearest point");
+
+var centeringSink = new RecordingMacSink();
+centeringSink.DisplayCatalog.Clear();
+centeringSink.DisplayCatalog.Add(builtIn);
+centeringSink.DisplayCatalog.Add(television);
+var centering = new MacInput(centeringSink);
+centering.Apply(new("", "move", Dx: 0.4));
+centering.Apply(new("", "selectDisplay", Display: "42"));
+Check(centering.SelectedDisplayId == "42" && centeringSink.Warps == 0 && centeringSink.CursorPosition == new MacPoint(100, 100),
+    "selectDisplay records the TV and does not move the pointer");
+centering.Apply(new("", "center", Display: "42"));
+Check(centeringSink.Warps == 1 && centeringSink.CursorPosition == new MacPoint(960, 540)
+    && centeringSink.Events[^1] is { MouseType: 5, DeltaX: 0, DeltaY: 0, Position: { X: 960, Y: 540 } },
+    "center warps to the TV and anchors it with a zero-delta move");
+var anchored = centeringSink.Events.Count;
+centering.Apply(new("", "move", Dx: 0.4));
+centering.Apply(new("", "move", Dx: 0.4));
+Check(centeringSink.Events.Count == anchored, "center clears the fractional remainder");
+centering.Apply(new("", "button", Button: "left", Down: true));
+var duringDrag = centeringSink.Warps;
+try { centering.Apply(new("", "center", Display: "42")); throw new Exception("FAIL: center during drag"); }
+catch (InputInjectionException error)
+{
+    Check(error.Message.StartsWith("input_busy:") && centeringSink.Warps == duringDrag && centeringSink.HeldButtons.Contains(0),
+        "center during a drag is rejected without releasing the button or warping");
+}
+centering.ReleaseAll();
+Check(centering.SelectedDisplayId is null, "disconnect forgets the selected display");
+try { centering.Apply(new("", "center", Display: "99")); throw new Exception("FAIL: unknown display centered"); }
+catch (InputInjectionException error)
+{
+    Check(error.Message.StartsWith("invalid_message:") && centeringSink.Warps == duringDrag, "unknown display does not warp");
+}
+var failedWarp = new RecordingMacSink { FailWarp = true };
+failedWarp.DisplayCatalog.Clear();
+failedWarp.DisplayCatalog.Add(television);
+try { new MacInput(failedWarp).Apply(new("", "center", Display: "42")); throw new Exception("FAIL: warp failure accepted"); }
+catch (InputInjectionException error)
+{
+    Check(error.Message.StartsWith("input_failed:") && failedWarp.Events.Count == 0 && failedWarp.CursorPosition == new MacPoint(100, 100),
+        "a failed warp posts no anchor event and leaves the pointer");
+}
 
 var clickingSink = new RecordingMacSink { DoubleClickInterval = .4, DoubleClickDistance = 3 };
 var clickingMac = new MacInput(clickingSink);
@@ -310,7 +404,19 @@ sealed class RecordingMacSink : IMacEventSink
 {
     public string StatusCode { get; set; } = "ready";
     public MacPoint CursorPosition { get; private set; } = new(100, 100);
-    public IReadOnlyList<MacRect> Displays { get; } = [new(-500, -200, 500, 500), new(0, 0, 1000, 800)];
+    public List<MacDisplayInfo> DisplayCatalog { get; } =
+        [new("1", new(-500, -200, 500, 500), 2, false), new("2", new(0, 0, 1000, 800), 2, true)];
+    IReadOnlyList<MacDisplayInfo> IMacEventSink.DisplayCatalog => DisplayCatalog;
+    public IReadOnlyList<MacRect> Displays => DisplayCatalog.Select(display => display.Bounds).ToArray();
+    public int Warps { get; private set; }
+    public bool FailWarp { get; set; }
+    public bool WarpCursor(MacPoint position)
+    {
+        Warps++;
+        if (FailWarp) return false;
+        CursorPosition = position;
+        return true;
+    }
     public double MonotonicSeconds { get; set; }
     public double DoubleClickInterval { get; init; } = .5;
     public double DoubleClickDistance { get; init; } = 4;

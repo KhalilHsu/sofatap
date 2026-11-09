@@ -1,0 +1,194 @@
+import SwiftUI
+
+/// Temporary gyro entry. The pebble is a stand-in for the later visual design:
+/// a dark stone at rest, amber while the finger is down, with a highlight that
+/// follows pitch and roll. Reduce Motion keeps the highlight in one place.
+struct AirMouseView: View {
+    @ObservedObject var model: ControllerModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some View {
+        VStack(spacing: 22) {
+            VStack(spacing: 6) {
+                Text(String(localized: "陀螺空鼠"))
+                    .font(.system(size: 22, weight: .semibold))
+                Text(String(localized: "暂时入口"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Palette.muted)
+                    .padding(.horizontal, 8).padding(.vertical, 3)
+                    .background(Palette.elevated, in: Capsule())
+            }
+            .padding(.top, 8)
+            HStack(alignment: .center, spacing: 22) {
+                pebble
+                Button(action: model.recenterAirMouse) {
+                    VStack(spacing: 6) {
+                        Image(systemName: "scope")
+                            .font(.system(size: 22, weight: .semibold))
+                        Text(String(localized: "回中"))
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .frame(width: 76, height: 76)
+                    .foregroundStyle(model.airMouseCanRecenter ? Palette.background : Palette.muted)
+                    .background(model.airMouseCanRecenter ? Palette.mint : Palette.elevated, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!model.airMouseCanRecenter)
+                .accessibilityIdentifier("airMouseRecenter")
+            }
+            Text(String(localized: "按住石子移动光标，松手立刻停止。轻点单击。"))
+                .font(.footnote)
+                .foregroundStyle(Palette.muted)
+                .multilineTextAlignment(.center)
+            if model.connected && !model.receiverState.supportsDisplayCentering {
+                Text(verbatim: ControllerModel.recenterUnsupportedNotice)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+                    .accessibilityIdentifier("airMouseRecenterNotice")
+            }
+            displayPicker
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(String(localized: "扫过所选屏幕宽度"))
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
+                    Text(verbatim: "\(Int(model.airMouseSweepDegrees.rounded()))°")
+                        .font(.subheadline.monospacedDigit())
+                        .foregroundStyle(Palette.mint)
+                }
+                Slider(value: Binding(
+                    get: { model.airMouseSweepDegrees },
+                    set: { model.setAirMouseSweepDegrees($0) }
+                ), in: AirMouseGain.minimumSweepDegrees...AirMouseGain.maximumSweepDegrees, step: 1)
+                .tint(Palette.mint)
+                .accessibilityLabel(String(localized: "扫过所选屏幕宽度"))
+                .accessibilityValue(Text(verbatim: "\(Int(model.airMouseSweepDegrees.rounded()))°"))
+            }
+            .padding(16)
+            .background(Palette.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 22)
+        .padding(.bottom, 18)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Palette.background)
+        .onAppear { if scenePhase == .active { model.startAirMouseSession() } }
+        .onDisappear { model.stopAirMouse() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { model.startAirMouseSession() }
+            else { model.airMouseTouchUp(); model.stopAirMouse() }
+        }
+        .onChange(of: model.connected) { _, _ in
+            if scenePhase == .active { model.startAirMouseSession() }
+        }
+    }
+
+    private var pebble: some View {
+        let highlight = AirMouseHighlight.offset(pitch: model.airMousePitch, roll: model.airMouseRoll, reduceMotion: reduceMotion)
+        return ZStack {
+            PebbleShape()
+                .fill(model.airMoving ? activeFill : idleFill)
+                .overlay {
+                    PebbleShape().stroke(model.airMoving ? Color.orange.opacity(0.85) : Color.white.opacity(0.14), lineWidth: model.airMoving ? 3 : 1)
+                }
+                .shadow(color: model.airMoving ? Color.orange.opacity(0.55) : .black.opacity(0.45), radius: model.airMoving ? 28 : 16, y: 10)
+            if !model.airMoving {
+                PebbleVeins()
+                    .stroke(Color.white.opacity(0.22), style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
+                    .padding(34)
+                    .allowsHitTesting(false)
+            }
+            Ellipse()
+                .fill(RadialGradient(colors: [Color.white.opacity(model.airMoving ? 0.95 : 0.35), .clear],
+                                     center: .center, startRadius: 0, endRadius: 28))
+                .frame(width: 64, height: 40)
+                .offset(x: highlight.x * 34, y: highlight.y * 26)
+                .blendMode(.plusLighter)
+                .allowsHitTesting(false)
+        }
+        .frame(width: 210, height: 168)
+        .contentShape(PebbleShape())
+        .gesture(DragGesture(minimumDistance: 0)
+            .onChanged { _ in model.airMouseTouchDown() }
+            .onEnded { _ in model.airMouseTouchUp() })
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String(localized: "按住石子移动光标，松手立刻停止。轻点单击。"))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("airMousePebble")
+    }
+
+    private var idleFill: LinearGradient {
+        LinearGradient(colors: [Color(white: 0.46), Color(white: 0.24), Color(white: 0.16)],
+                       startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
+    private var activeFill: RadialGradient {
+        RadialGradient(colors: [Color(red: 1, green: 0.78, blue: 0.32), Color(red: 0.93, green: 0.45, blue: 0.05), Color(red: 0.55, green: 0.18, blue: 0.02)],
+                       center: .center, startRadius: 8, endRadius: 120)
+    }
+
+    @ViewBuilder private var displayPicker: some View {
+        if model.receiverState.displays.isEmpty {
+            Text(String(localized: "选择电视屏幕"))
+                .font(.footnote)
+                .foregroundStyle(Palette.muted)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            Picker(String(localized: "选择电视屏幕"), selection: Binding(
+                get: { model.selectedRemoteDisplayID ?? "" },
+                set: { model.selectRemoteDisplay($0) }
+            )) {
+                ForEach(model.receiverState.displays) { display in
+                    Text(verbatim: displayLabel(display)).tag(display.id)
+                }
+            }
+            .pickerStyle(.menu)
+            .tint(Palette.mint)
+            .accessibilityIdentifier("airMouseDisplayPicker")
+        }
+    }
+
+    private func displayLabel(_ display: RemoteDisplay) -> String {
+        let scale = display.scale == display.scale.rounded() ? "\(Int(display.scale))x" : String(format: "%.1fx", display.scale)
+        let size = "\(display.width)×\(display.height) · \(scale)"
+        guard display.isMain else { return size }
+        return size + " · " + String(localized: "主屏幕")
+    }
+}
+
+private struct PebbleShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width, h = rect.height
+        var path = Path()
+        path.move(to: CGPoint(x: w * 0.50, y: h * 0.06))
+        path.addCurve(to: CGPoint(x: w * 0.90, y: h * 0.34),
+                      control1: CGPoint(x: w * 0.70, y: h * 0.02), control2: CGPoint(x: w * 0.92, y: h * 0.14))
+        path.addCurve(to: CGPoint(x: w * 0.84, y: h * 0.78),
+                      control1: CGPoint(x: w * 0.98, y: h * 0.52), control2: CGPoint(x: w * 0.96, y: h * 0.68))
+        path.addCurve(to: CGPoint(x: w * 0.46, y: h * 0.96),
+                      control1: CGPoint(x: w * 0.74, y: h * 0.94), control2: CGPoint(x: w * 0.60, y: h * 0.99))
+        path.addCurve(to: CGPoint(x: w * 0.10, y: h * 0.62),
+                      control1: CGPoint(x: w * 0.26, y: h * 0.94), control2: CGPoint(x: w * 0.08, y: h * 0.80))
+        path.addCurve(to: CGPoint(x: w * 0.22, y: h * 0.20),
+                      control1: CGPoint(x: w * 0.04, y: h * 0.44), control2: CGPoint(x: w * 0.08, y: h * 0.28))
+        path.addCurve(to: CGPoint(x: w * 0.50, y: h * 0.06),
+                      control1: CGPoint(x: w * 0.30, y: h * 0.08), control2: CGPoint(x: w * 0.38, y: h * 0.04))
+        path.closeSubpath()
+        return path
+    }
+}
+
+private struct PebbleVeins: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.midY))
+        path.addQuadCurve(to: CGPoint(x: rect.maxX * 0.92, y: rect.minY + 8),
+                          control: CGPoint(x: rect.midX, y: rect.midY - 10))
+        path.move(to: CGPoint(x: rect.minX + 6, y: rect.maxY * 0.72))
+        path.addQuadCurve(to: CGPoint(x: rect.maxX * 0.8, y: rect.maxY * 0.55),
+                          control: CGPoint(x: rect.midX, y: rect.maxY * 0.9))
+        return path
+    }
+}

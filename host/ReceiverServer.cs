@@ -3,6 +3,7 @@ using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using QRCoder;
 
@@ -70,14 +71,37 @@ public sealed class ReceiverServer(ReceiverOptions options, Credentials credenti
     // The retired account-password pilot must not be discoverable, even when a
     // legacy enrollment file remains on disk. PIN control needs a separate, verified protocol.
     internal static object CreateHello(string name, string platform, bool dryRun,
-        string status, TextFocusMetadata focus, bool liveTextSupported = false, bool systemVolumeSupported = false) => new
+        string status, TextFocusMetadata focus, bool liveTextSupported = false, bool systemVolumeSupported = false,
+        object? display = null) => new
     {
         type = "hello", version = 1, name, platform, dryRun,
         inputAvailable = status == "ready", inputStatus = status,
         textFocus = ReceiverDistribution.SupportsTextInspection ? focus : new TextFocusMetadata("unknown", 0),
         liveText = ReceiverDistribution.SupportsTextInspection && liveTextSupported && !dryRun ? new { version = 1 } : null,
-        systemVolume = systemVolumeSupported && !dryRun && status == "ready" ? new { version = 1 } : null
+        systemVolume = systemVolumeSupported && !dryRun && status == "ready" ? new { version = 1 } : null,
+        // Null is omitted. Older clients ignore this object when a Mac receiver includes it.
+        display
     };
+
+    /// Ping metadata. A missing display property preserves the phone's list; JSON null revokes it.
+    internal static JsonObject StatusPayload(ActionAck ack, string status, bool dryRun, TextFocusMetadata focus,
+        bool volume, DisplayReadResult displays)
+    {
+        var node = JsonSerializer.SerializeToNode(new
+        {
+            ack.Type, ack.Id, ack.Ok, ack.Error,
+            inputAvailable = status == "ready", inputStatus = status, dryRun,
+            textFocus = focus,
+            // JsonElement null is explicit even with WhenWritingNull: a
+            // removed/unsupported output must revoke a previous capability.
+            systemVolume = JsonSerializer.SerializeToElement(volume ? new { version = 1 } : null),
+            display = (object?)null
+        }, JsonOptions)!.AsObject();
+        var display = MacDisplayGeometry.Ping(displays.IsMac, displays.Succeeded, displays.Displays);
+        if (!display.Include) node.Remove("display");
+        else node["display"] = display.Node;
+        return node;
+    }
 
     private async Task RunController(WebSocket socket, CancellationToken requestAborted)
     {
@@ -89,8 +113,10 @@ public sealed class ReceiverServer(ReceiverOptions options, Credentials credenti
         var status = ReceiverPlatform.StatusCode(input, options.DryRun);
         using var liveText = ReceiverDistribution.SupportsTextInspection && !options.DryRun && textEditorFactory is not null
             ? new LiveTextSession(textEditorFactory(), () => ReceiverPlatform.StatusCode(input, options.DryRun) == "ready") : null;
+        var displays = MacDisplayProbe.Read();
+        var displayCapability = displays.Succeeded ? MacDisplayGeometry.Capability(displays.Displays) : null;
         await Send(socket, CreateHello(Environment.MachineName, ReceiverPlatform.Id,
-            options.DryRun, status, Focus(status), liveText is not null, VolumeAvailable(status)), lifetime.Token);
+            options.DryRun, status, Focus(status), liveText is not null, VolumeAvailable(status), displayCapability), lifetime.Token);
         var session = new ActionSession(input, liveText: liveText, systemVolume: _volume);
         var buffer = new byte[Protocol.MaximumFrameBytes + 1];
         while (socket.State == WebSocketState.Open && !lifetime.IsCancellationRequested)
@@ -133,13 +159,9 @@ public sealed class ReceiverServer(ReceiverOptions options, Credentials credenti
                 {
                     var currentStatus = ReceiverPlatform.StatusCode(input, options.DryRun);
                     if (currentStatus != "ready") liveText?.End();
-                    await Send(socket, new { ack.Type, ack.Id, ack.Ok, ack.Error,
-                        inputAvailable = currentStatus == "ready", inputStatus = currentStatus, dryRun = options.DryRun,
-                        textFocus = Focus(currentStatus),
-                        // JsonElement null is explicit even with WhenWritingNull: a
-                        // removed/unsupported output must revoke a previous capability.
-                        systemVolume = JsonSerializer.SerializeToElement(VolumeAvailable(currentStatus) ? new { version = 1 } : null)
-                    }, lifetime.Token);
+                    var currentDisplays = MacDisplayProbe.Read();
+                    await Send(socket, StatusPayload(ack, currentStatus, options.DryRun, Focus(currentStatus),
+                        VolumeAvailable(currentStatus), currentDisplays), lifetime.Token);
                 }
                 else await Send(socket, ack, lifetime.Token);
             }

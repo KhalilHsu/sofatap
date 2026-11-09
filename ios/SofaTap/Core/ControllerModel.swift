@@ -61,6 +61,12 @@ final class ControllerModel: ObservableObject {
     }
     @Published private(set) var dragging = false
     @Published private(set) var airMoving = false
+    @Published private(set) var airMouseSweepDegrees = AirMouseGain.defaultSweepDegrees
+    @Published private(set) var airMousePitch = 0.0
+    @Published private(set) var airMouseRoll = 0.0
+    @Published private(set) var selectedRemoteDisplayID: String?
+    /// Shown when a connected receiver did not advertise display centering.
+    static let recenterUnsupportedNotice = "当前接收端不支持自动回中"
     @Published private(set) var sensitivity = 1.0
     @Published private(set) var volumeBusy = false
     @Published private(set) var volumeFeedback: String?
@@ -168,6 +174,11 @@ final class ControllerModel: ObservableObject {
     private var queuedMovementStart = -Double.infinity
     private var lastScroll = Date.distantPast
     private let motion = CMMotionManager()
+    private var airContact = AirMouseContact()
+    private var airSession = false
+    private var airGeneration = UUID()
+    private var latestAirSample: AirMouseSample?
+    private var announcedMissingDisplayCenter = false
     private struct Pending {
         let type: String
         let timer: Task<Void, Never>
@@ -907,6 +918,7 @@ final class ControllerModel: ObservableObject {
             // The retired account-password capability is deliberately ignored.
             // Windows Hello PIN support requires a separate verified protocol.
             notice = state.inputAvailable ? String(localized: "已连接。先点选电脑上的输入框，即可发送文字。") : state.unavailableMessage
+            noteDisplays()
             startTimers()
             return true
         case "ack":
@@ -1048,17 +1060,19 @@ final class ControllerModel: ObservableObject {
         flushMovement()
     }
 
-    func move(dx: Double, dy: Double) {
+    func move(dx: Double, dy: Double, gain: Double? = nil) {
         guard canControl, dx.isFinite, dy.isFinite else { return }
         if demo { return }
+        let scale = gain ?? sensitivity
+        guard scale.isFinite else { return }
         // Relative distances must accumulate even while earlier packets await ACK.
         // Bound the age of the entire unsent batch, not just its newest sample.
         let now = movementTime
         if now - queuedMovementStart > Self.movementLifetime || abs(queuedDX) + abs(queuedDY) <= 0.01 {
             queuedDX = 0; queuedDY = 0; queuedMovementStart = now
         }
-        queuedDX = max(-500, min(500, queuedDX + dx * sensitivity))
-        queuedDY = max(-500, min(500, queuedDY + dy * sensitivity))
+        queuedDX = max(-500, min(500, queuedDX + dx * scale))
+        queuedDY = max(-500, min(500, queuedDY + dy * scale))
     }
 
     func scroll(dy: Double) {
@@ -1440,36 +1454,150 @@ final class ControllerModel: ObservableObject {
             }
         }
         receiverState = state; inputAvailable = state.inputAvailable
+        noteDisplays()
     }
 
-    func startAirMouse() {
-        guard canControl, foreground, !airMoving else { return }
-        if demo { airMoving = true; feedback(); return }
-        guard motion.isDeviceMotionAvailable else { notice = String(localized: "这台设备没有可用的陀螺仪，请使用触控板。"); return }
+    var airMouseCanRecenter: Bool {
+        canControl && receiverState.supportsDisplayCentering && selectedRemoteDisplayID != nil
+    }
+
+    /// Temporary gyro screen. Motion is sampled only while it is open; the
+    /// pointer moves only during a finger hold.
+    func startAirMouseSession() {
+        guard foreground, !airSession else { return }
+        airSession = true
+        airContact = AirMouseContact()
+        noteDisplays()
+        beginAirMotionUpdates()
+    }
+
+    func airMouseTouchDown() {
+        guard airSession, foreground, !airMoving else { return }
         airMoving = true
         feedback()
+        guard !demo, canControl, let latestAirSample else { return }
+        applyAirOutputs(airContact.begin(latestAirSample), sendMovement: false)
+    }
+
+    func airMouseTouchUp() {
+        guard airMoving else { return }
+        airMoving = false
+        queuedDX = 0; queuedDY = 0
+        guard !demo, canControl, let latestAirSample else { airContact.cancel(); return }
+        let outputs = airContact.end(latestAirSample)
+        applyAirOutputs(outputs, sendMovement: false)
+        if outputs.contains(.click) { click("left") }
+    }
+
+    func setAirMouseSweepDegrees(_ value: Double) {
+        airMouseSweepDegrees = AirMouseGain.clampSweep(value)
+        airContact.setMapping(sweepDegrees: airMouseSweepDegrees, logicalWidth: airMouseLogicalWidth, logicalHeight: airMouseLogicalHeight)
+    }
+
+    func selectRemoteDisplay(_ id: String) {
+        guard receiverState.displays.contains(where: { $0.id == id }) else { return }
+        guard id != selectedRemoteDisplayID else { return }
+        selectedRemoteDisplayID = id
+        airContact.setMapping(sweepDegrees: airMouseSweepDegrees, logicalWidth: airMouseLogicalWidth, logicalHeight: airMouseLogicalHeight)
+        guard canControl, receiverState.supportsDisplayCentering else { return }
+        send("selectDisplay", fields: ["display": id])
+    }
+
+    func recenterAirMouse() {
+        guard airMouseCanRecenter, let id = selectedRemoteDisplayID else {
+            if connected && !receiverState.supportsDisplayCentering {
+                notice = Self.recenterUnsupportedNotice
+                announcedMissingDisplayCenter = true
+            }
+            return
+        }
+        airContact.recenter()
+        queuedDX = 0; queuedDY = 0
+        send("center", fields: ["display": id])
+    }
+
+    func stopAirMouse() {
+        airGeneration = UUID()
+        motion.stopDeviceMotionUpdates()
+        airContact.cancel()
+        airMoving = false
+        airSession = false
+        latestAirSample = nil
+        announcedMissingDisplayCenter = false
+        airMousePitch = 0
+        airMouseRoll = 0
+        queuedDX = 0; queuedDY = 0
+    }
+
+    private var airMouseLogicalWidth: Double {
+        guard let id = selectedRemoteDisplayID,
+              let display = receiverState.displays.first(where: { $0.id == id }) else { return AirMouseGain.nominalLogicalWidth }
+        return Double(display.width)
+    }
+
+    private var airMouseLogicalHeight: Double {
+        guard let id = selectedRemoteDisplayID,
+              let display = receiverState.displays.first(where: { $0.id == id }) else { return AirMouseGain.nominalLogicalWidth }
+        return Double(display.height)
+    }
+
+    private func noteDisplays() {
+        selectedRemoteDisplayID = RemoteDisplay.keeping(selectedRemoteDisplayID, in: receiverState.displays)
+        airContact.setMapping(sweepDegrees: airMouseSweepDegrees, logicalWidth: airMouseLogicalWidth, logicalHeight: airMouseLogicalHeight)
+        if receiverState.supportsDisplayCentering { announcedMissingDisplayCenter = false }
+        else if airSession && connected && !announcedMissingDisplayCenter {
+            notice = Self.recenterUnsupportedNotice
+            announcedMissingDisplayCenter = true
+        }
+    }
+
+    private func beginAirMotionUpdates() {
+        guard !demo else { return }
+        guard motion.isDeviceMotionAvailable else {
+            notice = String(localized: "这台设备没有可用的陀螺仪，请使用触控板。")
+            return
+        }
+        let token = UUID()
+        airGeneration = token
         motion.deviceMotionUpdateInterval = 1.0 / 60.0
         motion.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: .main) { [weak self] data, error in
             Task { @MainActor in
-                guard let self, self.airMoving else { return }
+                guard let self, self.airGeneration == token, self.airSession else { return }
                 if error != nil {
                     self.stopAirMouse()
                     self.notice = String(localized: "无法读取陀螺仪，请检查运动权限或使用触控板。")
                     return
                 }
                 guard let data, ProcessInfo.processInfo.systemUptime - data.timestamp <= 0.15 else { return }
-                // Portrait, screen facing the user: y is left/right yaw, x is up/down pitch.
-                let yaw = abs(data.rotationRate.y) < 0.015 ? 0 : data.rotationRate.y
-                let pitch = abs(data.rotationRate.x) < 0.015 ? 0 : data.rotationRate.x
-                self.move(dx: -yaw * 18, dy: -pitch * 18)
+                let sample = AirMouseSample(
+                    time: data.timestamp,
+                    gravity: Vec3(x: data.gravity.x, y: data.gravity.y, z: data.gravity.z),
+                    rotationRate: Vec3(x: data.rotationRate.x, y: data.rotationRate.y, z: data.rotationRate.z))
+                self.latestAirSample = sample
+                if self.airMoving && self.airContact.isIdle && self.canControl {
+                    self.applyAirOutputs(self.airContact.begin(sample), sendMovement: false)
+                } else {
+                    self.applyAirOutputs(self.airContact.update(sample), sendMovement: true)
+                }
             }
         }
     }
 
-    func stopAirMouse() {
-        motion.stopDeviceMotionUpdates()
-        airMoving = false
-        queuedDX = 0; queuedDY = 0
+    private func applyAirOutputs(_ outputs: [AirMouseContact.Output], sendMovement: Bool) {
+        for output in outputs {
+            switch output {
+            case .pose(let pitch, let roll):
+                airMousePitch = pitch
+                airMouseRoll = roll
+            case .move(let dx, let dy):
+                if sendMovement {
+                    move(dx: dx, dy: dy, gain: 1)
+                    flushMovement()
+                }
+            case .click:
+                break
+            }
+        }
     }
 
     private func feedback() {

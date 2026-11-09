@@ -40,6 +40,7 @@ struct RemoteView: View {
     @State private var guideSheet = false
     @State private var gestureSettingsSheet = false
     @State private var volumeSheet = false
+    @State private var airMouseSheet = false
     @State private var gestureSettingsTarget = GestureTarget.computer
     @State private var gesturePreferences = GesturePreferences.load(from: .standard)
     @State private var showingSpeechError = false
@@ -180,6 +181,11 @@ struct RemoteView: View {
         .sheet(isPresented: $volumeSheet) {
             SystemVolumeSheet(model: model)
                 .presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $airMouseSheet) {
+            AirMouseView(model: model)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $gestureSettingsSheet) {
             GestureSettingsView(configuration: Binding(
@@ -421,6 +427,21 @@ struct RemoteView: View {
             .accessibilityValue(currentDeviceName + ", " + connectionLabel)
             .accessibilityIdentifier("pairingButton")
             Spacer(minLength: 0)
+            if !televisionSelected {
+                Button {
+                    stopInteraction()
+                    UISelectionFeedbackGenerator().selectionChanged()
+                    airMouseSheet = true
+                } label: {
+                    Image(systemName: "gyroscope")
+                        .font(.system(size: 20, weight: .medium))
+                        .frame(width: 44, height: 44).contentShape(Rectangle())
+                        .foregroundStyle(Palette.mint.opacity(0.88))
+                }
+                .buttonStyle(RemoteIconButtonStyle())
+                .accessibilityLabel(String(localized: "陀螺空鼠"))
+                .accessibilityIdentifier("airMouseButton")
+            }
             Button {
                 stopInteraction()
                 UISelectionFeedbackGenerator().selectionChanged()

@@ -502,3 +502,11 @@
 "松手取消" = "Loslassen zum Abbrechen";
 "轻点发送，左右滑动查看更多" = "Tippen zum Senden, wischen für mehr";
 "左右分区双击，长按快捷键，双击按住拖动。" = "Doppeltippen nach Hälfte, langes Drücken für Kurzbefehle, Doppeltippen und Halten zum Ziehen.";
+/* Temporary gyro air mouse. */
+"陀螺空鼠" = "Gyro-Luftmaus";
+"暂时入口" = "Vorläufiger Einstieg";
+"回中" = "Zentrieren";
+"按住石子移动光标，松手立刻停止。轻点单击。" = "Halte den Stein, um den Zeiger zu bewegen. Loslassen stoppt sofort. Kurzes Tippen klickt.";
+"扫过所选屏幕宽度" = "Breite des gewählten Bildschirms überstreichen";
+"选择电视屏幕" = "TV-Bildschirm wählen";
+"主屏幕" = "Hauptbildschirm";

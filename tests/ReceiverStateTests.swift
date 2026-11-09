@@ -77,6 +77,43 @@ struct ReceiverStateTests {
             check("Linux permission status preserves Control shortcuts", linux.commandModifier == "ctrl")
             check("Linux becomes ready after native authorization", linux.updating(["inputAvailable": true, "dryRun": false, "inputStatus": "ready"])!.inputAvailable)
         }
+        check("legacy hello has no display centering", !old.supportsDisplayCentering && old.displays.isEmpty)
+        let tv: [String: Any] = ["id": "42", "width": 1920, "height": 1080, "scale": 2, "isMain": false, "name": "ignored"]
+        let main: [String: Any] = ["id": "7", "width": 1512, "height": 982, "scale": 2, "isMain": true]
+        let catalog: [String: Any] = ["version": 1, "displays": [main, tv], "future": true]
+        let listed = ReceiverState.hello(["inputAvailable": true, "platform": "macos", "display": catalog])!
+        check("display catalog keeps logical size, scale and main flag",
+              listed.supportsDisplayCentering && listed.displays.count == 2 && listed.displays[1].id == "42"
+                && listed.displays[1].width == 1920 && listed.displays[1].height == 1080
+                && listed.displays[1].scale == 2 && !listed.displays[1].isMain && listed.displays[0].isMain)
+        check("selection prefers the main display until the user picks the TV",
+              RemoteDisplay.keeping(nil, in: listed.displays) == "7"
+                && RemoteDisplay.keeping("42", in: listed.displays) == "42"
+                && RemoteDisplay.keeping("missing", in: listed.displays) == "7")
+        let preserved = listed.updating(["inputAvailable": true, "dryRun": false, "inputStatus": "ready"])!
+        check("legacy ping keeps the negotiated display list", preserved.displays == listed.displays)
+        let revokedDisplays = ["inputAvailable": true, "dryRun": false, "inputStatus": "ready", "display": NSNull()] as [String: Any]
+        check("explicit null withdraws centering", !listed.updating(revokedDisplays)!.supportsDisplayCentering)
+        for bad: Any in [
+            ["version": 2, "displays": [tv]],
+            ["version": true, "displays": [tv]],
+            ["version": 1, "displays": []],
+            ["version": 1, "displays": [["id": "01", "width": 100, "height": 100, "scale": 1, "isMain": true]]],
+            ["version": 1, "displays": [["id": "5", "width": true, "height": 100, "scale": 1, "isMain": true]]],
+            ["version": 1, "displays": [tv, tv]],
+            ["version": 1, "displays": [
+                ["id": "1", "width": 10, "height": 10, "scale": 1, "isMain": true],
+                ["id": "2", "width": 10, "height": 10, "scale": 1, "isMain": true]
+            ]],
+            ["version": 1]
+        ] {
+            check("unusable display catalog does not enable centering",
+                  !ReceiverState.hello(["inputAvailable": true, "display": bad])!.supportsDisplayCentering)
+        }
+        check("scale is not a boolean",
+              !ReceiverState.hello(["inputAvailable": true, "display": ["version": 1, "displays": [
+                ["id": "5", "width": 100, "height": 80, "scale": true, "isMain": true]
+              ]]])!.supportsDisplayCentering)
         print("PASS \(passed) receiver state checks (no device input)")
     }
 }

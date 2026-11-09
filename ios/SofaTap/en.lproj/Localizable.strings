@@ -506,3 +506,11 @@
 "松手取消" = "Lift to cancel";
 "轻点发送，左右滑动查看更多" = "Tap to send, swipe for more";
 "左右分区双击，长按快捷键，双击按住拖动。" = "Split double tap, long press for shortcuts, double-tap-hold to drag.";
+/* Temporary gyro air mouse. */
+"陀螺空鼠" = "Gyro air mouse";
+"暂时入口" = "Temporary entry";
+"回中" = "Recenter";
+"按住石子移动光标，松手立刻停止。轻点单击。" = "Hold the pebble to move the pointer. Release to stop. A quick tap clicks.";
+"扫过所选屏幕宽度" = "Sweep across the selected display";
+"选择电视屏幕" = "Choose the TV display";
+"主屏幕" = "Main display";

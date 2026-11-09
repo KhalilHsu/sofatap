@@ -19,6 +19,58 @@ struct RemoteTextFocusPolicy {
     }
 }
 
+/// One logical display advertised by a receiver that can center the pointer.
+/// Unknown fields on the wire are ignored. A catalog is nil when it cannot be used.
+struct RemoteDisplay: Equatable, Identifiable {
+    var id: String
+    var width: Int
+    var height: Int
+    var scale: Double
+    var isMain: Bool
+
+    static func keeping(_ current: String?, in displays: [RemoteDisplay]) -> String? {
+        if let current, displays.contains(where: { $0.id == current }) { return current }
+        return displays.first(where: \.isMain)?.id ?? displays.first?.id
+    }
+
+    static func catalog(from value: Any?) -> [RemoteDisplay]? {
+        guard let object = value as? [String: Any],
+              LiveTextSnapshot.integer(object["version"]) == 1,
+              let entries = object["displays"] as? [Any],
+              !entries.isEmpty, entries.count <= 16 else { return nil }
+        var displays: [RemoteDisplay] = []
+        var seen = Set<String>()
+        for entry in entries {
+            guard let item = entry as? [String: Any], let display = parse(item), seen.insert(display.id).inserted else { return nil }
+            displays.append(display)
+        }
+        if displays.filter(\.isMain).count > 1 { return nil }
+        return displays
+    }
+
+    private static func parse(_ item: [String: Any]) -> RemoteDisplay? {
+        guard let id = item["id"] as? String, validID(id),
+              let width = LiveTextSnapshot.integer(item["width"]), (1...16_384).contains(width),
+              let height = LiveTextSnapshot.integer(item["height"]), (1...16_384).contains(height),
+              let scale = finiteScale(item["scale"]),
+              let main = item["isMain"] as? Bool else { return nil }
+        return RemoteDisplay(id: id, width: width, height: height, scale: scale, isMain: main)
+    }
+
+    private static func validID(_ id: String) -> Bool {
+        guard (1...10).contains(id.count), id.utf8.allSatisfy({ (48...57).contains($0) }),
+              id.count == 1 || !id.hasPrefix("0"), UInt32(id) != nil else { return false }
+        return true
+    }
+
+    private static func finiteScale(_ value: Any?) -> Double? {
+        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        let scale = number.doubleValue
+        guard scale.isFinite, scale >= 1, scale <= 8 else { return nil }
+        return scale
+    }
+}
+
 /// Additive protocol-v1 metadata. Older receivers omit it; unavailable never implies dry-run.
 struct ReceiverState: Equatable {
     enum Platform: String { case windows, macos, linux, unknown }
@@ -36,6 +88,8 @@ struct ReceiverState: Equatable {
     var reportsTextFocus: Bool = false
     var supportsLiveText: Bool = false
     var supportsSystemVolume: Bool = false
+    var displays: [RemoteDisplay] = []
+    var supportsDisplayCentering: Bool { !displays.isEmpty }
     var commandModifier: String { platform == .macos ? "win" : "ctrl" }
     var unavailableTitle: String {
         switch status {
@@ -77,6 +131,12 @@ struct ReceiverState: Equatable {
         var state = Self.make(platform: platform, available: available, message: message)
         if message["liveText"] == nil { state.supportsLiveText = supportsLiveText }
         if message["systemVolume"] == nil { state.supportsSystemVolume = supportsSystemVolume }
+        // A legacy heartbeat omits display and must keep the negotiated list.
+        // Explicit null, or a malformed catalog, withdraws centering.
+        if !message.keys.contains("display") { state.displays = displays }
+        else if message["display"] is NSNull { state.displays = [] }
+        else if let catalog = RemoteDisplay.catalog(from: message["display"]) { state.displays = catalog }
+        else { state.displays = [] }
         return state
     }
 
@@ -90,6 +150,7 @@ struct ReceiverState: Equatable {
            LiveTextSnapshot.integer(capability["version"]) == 1 { state.supportsLiveText = true }
         if let capability = message["systemVolume"] as? [String: Any],
            LiveTextSnapshot.integer(capability["version"]) == 1 { state.supportsSystemVolume = true }
+        if let catalog = RemoteDisplay.catalog(from: message["display"]) { state.displays = catalog }
         if let focus = message["textFocus"] as? [String: Any],
            let raw = focus["state"] as? String, let kind = RemoteTextFocus(rawValue: raw),
            let revision = focus["revision"] as? NSNumber,

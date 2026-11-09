@@ -502,3 +502,11 @@
 "松手取消" = "Angkat untuk membatalkan";
 "轻点发送，左右滑动查看更多" = "Ketuk untuk mengirim, geser untuk melihat lainnya";
 "左右分区双击，长按快捷键，双击按住拖动。" = "Ketuk dua kali per sisi, tekan lama untuk pintasan, ketuk dua kali lalu tahan untuk menyeret.";
+/* Temporary gyro air mouse. */
+"陀螺空鼠" = "Mouse udara giro";
+"暂时入口" = "Pintu masuk sementara";
+"回中" = "Ke tengah";
+"按住石子移动光标，松手立刻停止。轻点单击。" = "Tahan batu untuk menggerakkan penunjuk. Lepas untuk berhenti. Ketukan singkat mengeklik.";
+"扫过所选屏幕宽度" = "Menyapu lebar layar yang dipilih";
+"选择电视屏幕" = "Pilih layar TV";
+"主屏幕" = "Layar utama";

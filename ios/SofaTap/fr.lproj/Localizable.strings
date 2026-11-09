@@ -502,3 +502,11 @@
 "松手取消" = "Relâchez pour annuler";
 "轻点发送，左右滑动查看更多" = "Touchez pour envoyer, balayez pour en voir plus";
 "左右分区双击，长按快捷键，双击按住拖动。" = "Double toucher par zone, appui long pour les raccourcis, double toucher maintenu pour glisser.";
+/* Temporary gyro air mouse. */
+"陀螺空鼠" = "Souris aérienne gyroscopique";
+"暂时入口" = "Entrée temporaire";
+"回中" = "Recentrer";
+"按住石子移动光标，松手立刻停止。轻点单击。" = "Maintiens le galet pour déplacer le pointeur. Relâche pour arrêter. Un tap court clique.";
+"扫过所选屏幕宽度" = "Balayer la largeur de l'écran choisi";
+"选择电视屏幕" = "Choisir l'écran du téléviseur";
+"主屏幕" = "Écran principal";

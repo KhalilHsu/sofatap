@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		003BCBE1CCF4CAB4EDC3E62F /* PairingCode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 464B9D8EC8DF4BC68A96EDCA /* PairingCode.swift */; };
+		B2E11B22C3D4E5F60718293A /* AirMouseMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F00A11B2C3D4E5F6071829 /* AirMouseMotion.swift */; };
+		D4C33D44E5F60718293A4B5C /* AirMouseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D22C33D4E5F60718293A4B /* AirMouseView.swift */; };
 		0880E9F8731F50DEA8E7378E /* AndroidTVPairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6DC33E8052762AFA900FC59 /* AndroidTVPairingView.swift */; };
 		0BE3084A48A20D1B2A26FF38 /* PeerTransportDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B025E89091221B07940DE33 /* PeerTransportDiscovery.swift */; };
 		0C3B35855B50DA22F878C842 /* PairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8F19D4B8423478A9CA42C50 /* PairingView.swift */; };
@@ -59,6 +61,8 @@
 
 /* Begin PBXFileReference section */
 		0416314FF9ABB35588FD4779 /* EdgeScrollStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeScrollStrip.swift; sourceTree = "<group>"; };
+		A1F00A11B2C3D4E5F6071829 /* AirMouseMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirMouseMotion.swift; sourceTree = "<group>"; };
+		C3D22C33D4E5F60718293A4B /* AirMouseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirMouseView.swift; sourceTree = "<group>"; };
 		073F44E198299E317E1E4D3D /* NativeControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeControls.swift; sourceTree = "<group>"; };
 		0CD153A949AB5AE1D0EF3CC3 /* GestureConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GestureConfiguration.swift; sourceTree = "<group>"; };
 		0FC98CB31D572AB388B6B719 /* SofaTap.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SofaTap.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -136,6 +140,7 @@
 		48AD4029C135513A254E55C4 /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				A1F00A11B2C3D4E5F6071829 /* AirMouseMotion.swift */,
 				5315D7C30FD44FEBDC00AB29 /* ComputerUnlockController.swift */,
 				7A3175A3377E3E1F6F1FD381 /* ControllerModel.swift */,
 				53495476F4E1A21926CBCAD3 /* DeviceGuideContext.swift */,
@@ -201,6 +206,7 @@
 		B49CA2B0F841DC5E1D5FA3DE /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				C3D22C33D4E5F60718293A4B /* AirMouseView.swift */,
 				B7278E8AE3984D11185A862A /* AddDeviceView.swift */,
 				2579134CBB91C5AF446BB081 /* AndroidTVComposer.swift */,
 				27466787F2CA3B385E583839 /* AndroidTVNavigationView.swift */,
@@ -313,6 +319,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B2E11B22C3D4E5F60718293A /* AirMouseMotion.swift in Sources */,
+				D4C33D44E5F60718293A4B5C /* AirMouseView.swift in Sources */,
 				A56D49F018B31B26158F30AA /* AddDeviceView.swift in Sources */,
 				B5CFBF6C0FCDCB2F7375011E /* AndroidTVComposer.swift in Sources */,
 				14781C4CA2D4BF8AA1B01BFC /* AndroidTVController.swift in Sources */,

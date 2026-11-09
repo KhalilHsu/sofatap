@@ -71,6 +71,30 @@ Unlike background focus metadata, an explicit live session reads and transfers t
 
 Native responses use compact Unicode JSON encoding over pinned TLS, never HTML. The actual escaped text size is checked before accepting a live begin/sync, with 1,024 bytes reserved for its envelope. All outgoing frames are additionally checked against 64 KiB. Thus a CJK/emoji field cannot be modified successfully and then lose its ACK solely because default JSON escaping expanded the response beyond the client limit.
 
+## Display centering extension
+
+Mac receivers that can see the active displays add an optional `display` object to `hello`. Ping acknowledgements include the same object when a fresh catalog was read. Older clients ignore the object. A client that understands it still accepts a hello that omits it. Omission on a later ping keeps the list already negotiated; JSON `null` withdraws it. Dry-run and non-Mac receivers omit it. The object does not include global coordinates or window names.
+
+```json
+"display": {
+  "version": 1,
+  "displays": [
+    {"id": "42", "width": 1920, "height": 1080, "scale": 2, "isMain": false}
+  ]
+}
+```
+
+`id` is the decimal `CGDirectDisplayID` without padding. `width` and `height` are logical points, not physical pixels. `scale` is the pixel-to-point ratio from 1 to 8. At most one entry has `isMain: true`. At most 16 displays are advertised. Unknown fields inside this object are ignored. A malformed catalog disables centering rather than failing the connection.
+
+Two new actions use that id. Clients send them only after `display.version` is 1. A receiver that does not implement them keeps the existing rule and rejects the unknown type without moving the pointer, so an old receiver is never asked to center. Unknown fields on these actions are rejected, as with every other action.
+
+- `{"id":"...","type":"selectDisplay","display":"42"}` records which display the phone is using. It does not move the pointer. An unknown id is `invalid_message` and does not release buttons already held.
+- `{"id":"...","type":"center","display":"42"}` warps the pointer to the center of that display with `CGWarpMouseCursorPosition`, then posts a zero-delta mouse-moved event at the same point so the warp stays put. The center is the geometric center of that display's bounds in global points, including displays that are not the main display. It clears the receiver's fractional move remainder. It is rejected with `input_busy` while a remote drag button is held, without releasing that button. Disconnect and `ReleaseAll` forget the selected id.
+
+The phone turns the slider "degrees to sweep the selected display's width" into pointer points with that display's logical width: one full sweep of the slider angle moves `width` points. Vertical motion uses the same points per radian. If hello has no display catalog, gyro motion still uses relative `move` frames against a nominal 1920-point width, and recenter stays disabled. The phone shows `当前接收端不支持自动回中` and does not send `center` or `selectDisplay`.
+
+Gyro samples are not a new wire type. While a finger is held they become the existing relative `move` values, each axis still limited to ±500. Releasing the finger sends nothing further. A short press is a `click` and the attitude change during that press is discarded so the pointer does not jump. Disconnect, backgrounding and leaving the gyro screen stop sampling and clear unsent movement. No mouse button is left down by the gyro path.
+
 ## Verification boundary
 
 Dry-run is allowed on Windows, macOS and Linux for protocol/TLS tests and must report inputAvailable=false. Linux real input uses X11 XTest/libxdo or an explicitly authorized Wayland RemoteDesktop portal. Actual pointer/text injection requires physical interactive desktop tests on each supported OS. Mac requires an active, unlocked console session and Accessibility/post-event authorization; reading availability must not prompt. The native window provides an explicit permission action through inherited process pipes. The receiver has no HTTP/HTML pairing dashboard or local HTTP action endpoints. A bounded JSON line protocol accepts only refresh, requestAccess and quit; EOF stops the receiver and releases owned input. Pairing QR PNGs and URIs are provided only to this local parent process. The network endpoint still accepts only authenticated WSS control messages. macOS secure fields and applications rejecting synthetic events are outside the verified contract. iOS simulator tests do not establish Typeless, camera, physical gyroscope, or real iPhone LAN behavior.
