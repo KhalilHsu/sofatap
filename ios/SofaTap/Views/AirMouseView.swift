@@ -89,7 +89,7 @@ struct AirMouseView: View {
         let highlight = AirMouseHighlight.offset(pitch: model.airMousePitch, roll: model.airMouseRoll, reduceMotion: reduceMotion)
         return ZStack {
             PebbleShape()
-                .fill(model.airMoving ? activeFill : idleFill)
+                .fill(model.airMoving ? AnyShapeStyle(activeFill) : AnyShapeStyle(idleFill))
                 .overlay {
                     PebbleShape().stroke(model.airMoving ? Color.orange.opacity(0.85) : Color.white.opacity(0.14), lineWidth: model.airMoving ? 3 : 1)
                 }
