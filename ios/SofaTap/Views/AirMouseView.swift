@@ -27,6 +27,8 @@ struct AirMouseView: View {
     @AppStorage(ControllerModel.airMouseSweepKey) private var storedSweep = AirMouseGain.defaultSweepDegrees
     @AppStorage("sofatap.airMouse.hintSeen") private var hintSeen = false
     @State private var showHint = false
+    /// Survives view rebuilds within the launch that first showed the hint.
+    private static var hintShownThisLaunch = false
 
     private func pushGestureSettings() {
         model.setAirMouseCard(flickRightClick: flickRightClick, rightHold: rightHold)
@@ -60,7 +62,8 @@ struct AirMouseView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             // The hint shows only on the first visit.
-            if !hintSeen { showHint = true; hintSeen = true }
+            if !hintSeen { hintSeen = true; Self.hintShownThisLaunch = true }
+            showHint = Self.hintShownThisLaunch
         }
         .onAppear { if scenePhase == .active { model.startAirMouseSession() } }
         .onDisappear { model.stopAirMouse() }
@@ -73,12 +76,7 @@ struct AirMouseView: View {
         }
     }
 
-    private var airMouseHint: String {
-        if UIScreen.main.bounds.height <= 700 {
-            return String(localized: "按住移动 · 轻点单击")
-        }
-        return String(localized: "按住石子移动光标，松手停止，轻点单击")
-    }
+    private var airMouseHint: String { String(localized: "按住移动 · 轻点单击") }
 
     private var pebble: some View {
         let choice = model.airMouseAppearance

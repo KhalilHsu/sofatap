@@ -574,7 +574,8 @@ struct RemoteView: View {
                         }
                     }
                 }
-            } else {
+            } else if !showsAirMouse {
+                // Air mouse owns the whole card; a scroll strip there would steal blind drags.
                 GeometryReader { geometry in
                     edgeScrollStrip
                         .frame(width: EdgeScrollStrip.minimumHitWidth,
