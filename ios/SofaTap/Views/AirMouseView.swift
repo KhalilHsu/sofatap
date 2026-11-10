@@ -32,34 +32,24 @@ struct AirMouseView: View {
         VStack(spacing: 22) {
             VStack(spacing: 14) {
                 pebble
-                Button(action: model.recenterAirMouse) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "scope")
-                        Text(String(localized: "回中"))
-                    }
-                    .font(.system(size: 15, weight: .semibold))
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 10)
-                    .foregroundStyle(model.airMouseCanRecenter ? Palette.background : Palette.muted)
-                    .background(model.airMouseCanRecenter ? Palette.mint : Palette.elevated, in: Capsule())
+                HStack(spacing: 8) {
+                    capsuleButton(title: String(localized: "回中"), systemImage: "scope", enabled: model.airMouseCanRecenter, action: model.recenterAirMouse)
+                        .accessibilityIdentifier("airMouseRecenter")
+                    displayMenu
                 }
-                .buttonStyle(.plain)
-                .disabled(!model.airMouseCanRecenter)
-                .accessibilityIdentifier("airMouseRecenter")
             }
             .frame(maxWidth: .infinity)
-            Text(String(localized: "按住石子移动光标，松手立刻停止。轻点单击。"))
-                .font(.footnote)
+            Text(airMouseHint)
+                .font(.system(size: 13))
                 .foregroundStyle(Palette.muted)
                 .multilineTextAlignment(.center)
             if model.connected && !model.receiverState.supportsDisplayCentering {
                 Text(verbatim: ControllerModel.recenterUnsupportedNotice)
-                    .font(.footnote.weight(.semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.orange)
                     .multilineTextAlignment(.center)
                     .accessibilityIdentifier("airMouseRecenterNotice")
             }
-            displayPicker
             VStack(alignment: .leading, spacing: 8) {
                 Text(String(localized: "灵敏度"))
                     .font(.subheadline.weight(.semibold))
@@ -101,63 +91,109 @@ struct AirMouseView: View {
         }
     }
 
-    private var pebble: some View {
-        let highlight = AirMouseHighlight.offset(pitch: model.airMousePitch, roll: model.airMouseRoll, reduceMotion: reduceMotion)
-        let choice = model.airMouseAppearance
-        return TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { timeline in
-            let breath = reduceMotion ? 1.0 : 1 + 0.035 * sin(timeline.date.timeIntervalSinceReferenceDate / 2.4 * 2 * Double.pi)
-            stoneImage
-                .scaleEffect(x: (choice.mirrored ? -1 : 1) * choice.scale * breath, y: choice.scale * breath)
-                .rotationEffect(.degrees(choice.rotationDegrees))
-                .overlay {
-                    Ellipse()
-                        .fill(RadialGradient(colors: [Color.white.opacity(model.airMoving ? 0.9 : 0.28), .clear],
-                                             center: .center, startRadius: 0, endRadius: 22))
-                        .frame(width: 52, height: 32)
-                        .offset(x: highlight.x * 28, y: highlight.y * 22)
-                        .blendMode(.plusLighter)
-                        .allowsHitTesting(false)
-                }
-                .frame(maxWidth: 240)
-                .frame(maxWidth: .infinity)
+    private var airMouseHint: String {
+        if UIScreen.main.bounds.height <= 700 {
+            return String(localized: "按住移动 · 轻点单击")
         }
+        return String(localized: "按住石子移动光标，松手停止，轻点单击")
+    }
+
+    private func capsuleButton(title: String, systemImage: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage).font(.system(size: 14, weight: .semibold))
+                Text(title).font(.system(size: 14, weight: .semibold))
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 36)
+            .foregroundStyle(enabled ? .white : Palette.muted)
+            .background(Palette.panel, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+    }
+
+    private var displayMenu: some View {
+        Menu {
+            if model.receiverState.displays.isEmpty {
+                Button(String(localized: "选择电视屏幕")) {}
+            } else {
+                ForEach(model.receiverState.displays) { display in
+                    Button(displayLabel(display)) { model.selectRemoteDisplay(display.id) }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(String(localized: "电视屏幕")).font(.system(size: 14, weight: .semibold))
+                Image(systemName: "chevron.down").font(.system(size: 11, weight: .semibold))
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 36)
+            .foregroundStyle(model.receiverState.displays.isEmpty ? Palette.muted : .white)
+            .background(Palette.panel, in: Capsule())
+        }
+        .disabled(model.receiverState.displays.isEmpty)
+        .accessibilityIdentifier("airMouseDisplayPicker")
+    }
+
+    private var pebble: some View {
+        let choice = model.airMouseAppearance
+        let longEdge: CGFloat = UIScreen.main.bounds.height <= 700 ? 180 : 230
+        let lit = model.airMoving
+        let motion = reduceMotion ? Animation.easeOut(duration: 0.1) : (lit ? .easeOut(duration: 0.14) : .easeOut(duration: 0.2))
+        return TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { timeline in
+            let wave = reduceMotion ? 0.0 : 0.5 + 0.5 * sin(timeline.date.timeIntervalSinceReferenceDate / 2.4 * 2 * Double.pi)
+            let breathScale = reduceMotion ? 1.0 : 0.98 + 0.05 * wave
+            let breathOpacity = reduceMotion ? 1.0 : 0.55 + 0.45 * wave
+            stoneImage(longEdge: longEdge)
+                .opacity(breathOpacity)
+                .scaleEffect(x: (choice.mirrored ? -1 : 1) * choice.scale * breathScale, y: choice.scale * breathScale)
+                .rotationEffect(.degrees(choice.rotationDegrees))
+                .animation(motion, value: lit)
+        }
+        .frame(width: longEdge, height: longEdge * 329 / 460)
+        .contentShape(Rectangle())
         .allowsHitTesting(false)
         .accessibilityIdentifier("airMousePebble")
     }
 
-    private var stoneImage: some View {
+    private func stoneImage(longEdge: CGFloat) -> some View {
         let name = model.airMouseAppearance.stone.assetName
+        let highlight = tiltHighlight
         return Image(name)
             .resizable()
             .scaledToFit()
+            .frame(width: longEdge)
             .overlay {
                 if model.airMoving {
-                    Image(name).resizable().scaledToFit()
-                        .colorMultiply(Color(red: 1, green: 0.55, blue: 0.12))
-                        .opacity(0.85)
+                    Image(name)
+                        .resizable()
+                        .scaledToFit()
+                        .colorMultiply(Color(red: 1, green: 159.0 / 255, blue: 67.0 / 255))
+                        .opacity(0.35)
                         .allowsHitTesting(false)
                 }
             }
-            .shadow(color: model.airMoving ? Color.orange.opacity(0.55) : .black.opacity(0.35),
-                    radius: model.airMoving ? 18 : 10, y: 8)
+            .overlay {
+                GeometryReader { geo in
+                    Ellipse()
+                        .fill(RadialGradient(colors: [Color.white.opacity(0.55), Color.white.opacity(0)],
+                                             center: .center, startRadius: 0, endRadius: min(geo.size.width, geo.size.height) * 0.4))
+                        .frame(width: geo.size.width * 0.72, height: geo.size.height * 0.55)
+                        .position(x: geo.size.width * highlight.x, y: geo.size.height * highlight.y)
+                        .allowsHitTesting(false)
+                }
+                .mask(Image(name).resizable().scaledToFit())
+            }
+            .shadow(color: model.airMoving ? Color(red: 1, green: 140.0 / 255, blue: 40.0 / 255).opacity(0.45) : .clear,
+                    radius: model.airMoving ? 24 : 0)
     }
 
-    @ViewBuilder private var displayPicker: some View {
-        if !model.receiverState.displays.isEmpty {
-            Picker(String(localized: "选择电视屏幕"), selection: Binding(
-                get: { model.selectedRemoteDisplayID ?? "" },
-                set: { model.selectRemoteDisplay($0) }
-            )) {
-                ForEach(model.receiverState.displays) { display in
-                    Text(verbatim: displayLabel(display)).tag(display.id)
-                }
-            }
-            .pickerStyle(.menu)
-            .labelsHidden()
-            .tint(Palette.mint)
-            .accessibilityLabel(String(localized: "选择电视屏幕"))
-            .accessibilityIdentifier("airMouseDisplayPicker")
-        }
+    /// Highlight center as a fraction of the stone. Pitch and roll are radians.
+    private var tiltHighlight: (x: Double, y: Double) {
+        let pitch = min(30, max(-30, model.airMousePitch * 180 / .pi))
+        let roll = min(30, max(-30, model.airMouseRoll * 180 / .pi))
+        return (0.5 + roll * 0.007, 0.5 - pitch * 0.007)
     }
 
     private func displayLabel(_ display: RemoteDisplay) -> String {
@@ -173,29 +209,43 @@ struct AirMouseView: View {
 struct RemoteSurfaceToggle: View {
     @Binding var airMouse: Bool
     var enabled: Bool
+    @Namespace private var selection
 
     var body: some View {
-        HStack(spacing: 4) {
-            segment(String(localized: "触控板"), selected: !airMouse) { airMouse = false }
-            segment(String(localized: "陀螺空鼠"), selected: airMouse) { airMouse = true }
+        HStack(spacing: 0) {
+            segment(String(localized: "触控板"), symbol: "hand.point.up.left", selected: !airMouse) { select(false) }
+            segment(String(localized: "陀螺空鼠"), symbol: "gyroscope", selected: airMouse) { select(true) }
         }
-        .padding(.horizontal, 3)
+        .padding(3)
         .frame(width: 248, height: 36)
         .background(Palette.elevated, in: Capsule())
+        .overlay(Capsule().stroke(Palette.mint.opacity(0.10), lineWidth: 1))
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: airMouse)
         .opacity(enabled ? 1 : 0.45)
         .disabled(!enabled)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("remoteSurfaceToggle")
     }
 
-    private func segment(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+    private func select(_ air: Bool) {
+        guard air != airMouse else { return }
+        airMouse = air
+        UISelectionFeedbackGenerator().selectionChanged()
+    }
+
+    private func segment(_ title: String, symbol: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title)
-                .font(.system(size: 14, weight: .semibold))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-                .foregroundStyle(selected ? Palette.background : Palette.muted)
-                .background(selected ? Palette.mint : Color.clear, in: Capsule())
+            HStack(spacing: 4) {
+                Image(systemName: symbol).font(.system(size: 13, weight: .medium))
+                Text(title).font(.system(size: 14, weight: selected ? .semibold : .medium))
+            }
+            .frame(width: 121, height: 30)
+            .foregroundStyle(selected ? Palette.background : Palette.muted)
+            .background {
+                if selected {
+                    Capsule().fill(Palette.mint).matchedGeometryEffect(id: "remoteSurface", in: selection)
+                }
+            }
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])

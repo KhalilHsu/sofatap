@@ -1489,6 +1489,7 @@ final class ControllerModel: ObservableObject {
     func airMouseFingerDown(x: Double, y: Double) {
         guard airSession, foreground, !airMoving else { return }
         airMoving = true
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         applyCardActions(cardGesture.touchDown(at: .init(x: x, y: y), time: movementTime, pitch: airTracker.pitch, yaw: airTracker.yaw))
     }
 
@@ -1502,6 +1503,7 @@ final class ControllerModel: ObservableObject {
         airMoving = false
         queuedDX = 0
         queuedDY = 0
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
         applyCardActions(cardGesture.touchUp(time: movementTime))
     }
 

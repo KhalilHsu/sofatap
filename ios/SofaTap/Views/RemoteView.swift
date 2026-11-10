@@ -461,8 +461,9 @@ struct RemoteView: View {
                 .allowsHitTesting(false)
             if showsAirMouse {
                 AirMouseView(model: model)
-                    .padding(.top, 118)
+                    .padding(.top, 146)
                     .padding(.bottom, 78)
+                    .transition(.opacity)
             } else {
             TouchSurface(enabled: inputEnabled && !tvNavigationSelected, control: touchControl,
                          profile: televisionSelected ? .tvPointer : .desktop,
@@ -480,6 +481,7 @@ struct RemoteView: View {
                          onShortcutPanel: handleShortcutPanel,
                          onInteractionBegan: { tvAuxiliaryControl.cancel() })
                 .allowsHitTesting(!tvNavigationSelected)
+                .transition(.opacity)
             }
             if tvNavigationSelected {
                 tvNavigationSurface
@@ -513,8 +515,12 @@ struct RemoteView: View {
             }
         }
         .overlay(alignment: .top) {
+            header
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+        }
+        .overlay(alignment: .top) {
             VStack(spacing: 6) {
-                header
                 RemoteSurfaceToggle(airMouse: Binding(
                     get: { remoteSurface == "airMouse" },
                     set: { remoteSurface = $0 ? "airMouse" : "trackpad" }
@@ -526,9 +532,9 @@ struct RemoteView: View {
                         .accessibilityIdentifier("airMouseUnavailableNote")
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
+            .padding(.top, 86)
         }
+        .animation(.easeInOut(duration: 0.2), value: showsAirMouse)
         .onChange(of: showsAirMouse) { _, show in
             if !show { model.stopAirMouse() }
         }
