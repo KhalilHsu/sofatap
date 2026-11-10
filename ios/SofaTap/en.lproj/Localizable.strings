@@ -517,3 +517,5 @@
 "慢" = "Slow";
 "快" = "Fast";
 "手腕转一点，光标走多远" = "How far the pointer moves when your wrist turns a little";
+"触控板" = "Trackpad";
+"连接 Mac 后可用" = "Available after connecting a Mac";

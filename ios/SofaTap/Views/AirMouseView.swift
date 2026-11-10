@@ -185,6 +185,39 @@ private struct PebbleShape: Shape {
     }
 }
 
+/// Dark two-segment control for the remote card. Stock UISegmentedControl
+/// stays light and does not sit cleanly beside the television note.
+struct RemoteSurfaceToggle: View {
+    @Binding var airMouse: Bool
+    var enabled: Bool
+
+    var body: some View {
+        HStack(spacing: 4) {
+            segment(String(localized: "触控板"), selected: !airMouse) { airMouse = false }
+            segment(String(localized: "陀螺空鼠"), selected: airMouse) { airMouse = true }
+        }
+        .padding(4)
+        .background(Palette.elevated, in: Capsule())
+        .opacity(enabled ? 1 : 0.45)
+        .disabled(!enabled)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("remoteSurfaceToggle")
+    }
+
+    private func segment(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 14, weight: .semibold))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .foregroundStyle(selected ? Palette.background : Palette.muted)
+                .background(selected ? Palette.mint : Color.clear, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
 private struct PebbleVeins: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()

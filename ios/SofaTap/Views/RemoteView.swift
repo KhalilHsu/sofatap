@@ -40,7 +40,7 @@ struct RemoteView: View {
     @State private var guideSheet = false
     @State private var gestureSettingsSheet = false
     @State private var volumeSheet = false
-    @State private var airMouseSheet = false
+    @AppStorage("sofatap.remoteSurface.v1") private var remoteSurface = "airMouse"
     @State private var gestureSettingsTarget = GestureTarget.computer
     @State private var gesturePreferences = GesturePreferences.load(from: .standard)
     @State private var showingSpeechError = false
@@ -181,11 +181,6 @@ struct RemoteView: View {
         .sheet(isPresented: $volumeSheet) {
             SystemVolumeSheet(model: model)
                 .presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $airMouseSheet) {
-            AirMouseView(model: model)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $gestureSettingsSheet) {
             GestureSettingsView(configuration: Binding(
@@ -427,21 +422,6 @@ struct RemoteView: View {
             .accessibilityValue(currentDeviceName + ", " + connectionLabel)
             .accessibilityIdentifier("pairingButton")
             Spacer(minLength: 0)
-            if !televisionSelected {
-                Button {
-                    stopInteraction()
-                    UISelectionFeedbackGenerator().selectionChanged()
-                    airMouseSheet = true
-                } label: {
-                    Image(systemName: "gyroscope")
-                        .font(.system(size: 20, weight: .medium))
-                        .frame(width: 44, height: 44).contentShape(Rectangle())
-                        .foregroundStyle(Palette.mint.opacity(0.88))
-                }
-                .buttonStyle(RemoteIconButtonStyle())
-                .accessibilityLabel(String(localized: "陀螺空鼠"))
-                .accessibilityIdentifier("airMouseButton")
-            }
             Button {
                 stopInteraction()
                 UISelectionFeedbackGenerator().selectionChanged()
@@ -479,6 +459,11 @@ struct RemoteView: View {
                                                Color(red: 0.032, green: 0.048, blue: 0.059)],
                                      startPoint: .topLeading, endPoint: .bottomTrailing))
                 .allowsHitTesting(false)
+            if showsAirMouse {
+                AirMouseView(model: model)
+                    .padding(.top, 118)
+                    .padding(.bottom, 78)
+            } else {
             TouchSurface(enabled: inputEnabled && !tvNavigationSelected, control: touchControl,
                          profile: televisionSelected ? .tvPointer : .desktop,
                          configuration: gestureConfiguration,
@@ -495,6 +480,7 @@ struct RemoteView: View {
                          onShortcutPanel: handleShortcutPanel,
                          onInteractionBegan: { tvAuxiliaryControl.cancel() })
                 .allowsHitTesting(!tvNavigationSelected)
+            }
             if tvNavigationSelected {
                 tvNavigationSurface
                 if !androidTV.canNavigate { tvNavigationSetupPrompt }
@@ -526,7 +512,27 @@ struct RemoteView: View {
                     .padding(layoutDirection == .rightToLeft ? .leading : .trailing, 8)
             }
         }
-        .overlay(alignment: .top) { header.padding(.horizontal, 20).padding(.top, 20) }
+        .overlay(alignment: .top) {
+            VStack(spacing: 6) {
+                header
+                RemoteSurfaceToggle(airMouse: Binding(
+                    get: { remoteSurface == "airMouse" },
+                    set: { remoteSurface = $0 ? "airMouse" : "trackpad" }
+                ), enabled: !televisionSelected)
+                .padding(.horizontal, 12)
+                if televisionSelected {
+                    Text(String(localized: "连接 Mac 后可用"))
+                        .font(.caption2)
+                        .foregroundStyle(Palette.muted)
+                        .accessibilityIdentifier("airMouseUnavailableNote")
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+        }
+        .onChange(of: showsAirMouse) { _, show in
+            if !show { model.stopAirMouse() }
+        }
         .overlay(alignment: .bottom) {
             // Physical control positions reserve the right edge for scrolling.
             // Text elsewhere continues to follow the selected language's direction.
@@ -1068,6 +1074,8 @@ struct RemoteView: View {
         remoteFocus.reset()
         model.setDesktopControlEnabled(true, reconnect: reconnect)
     }
+    private var showsAirMouse: Bool { !televisionSelected && remoteSurface == "airMouse" }
+
     private func resumeCurrentInput() {
         guard inputSessionAvailable else { return }
         if androidTVSelected { androidTV.resumeInput() }
