@@ -30,16 +30,9 @@ struct AirMouseView: View {
 
     private var controls: some View {
         VStack(spacing: 22) {
-            VStack(spacing: 6) {
-                Text(String(localized: "陀螺空鼠"))
-                    .font(.system(size: 22, weight: .semibold))
-                Text(String(localized: "暂时入口"))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Palette.muted)
-                    .padding(.horizontal, 8).padding(.vertical, 3)
-                    .background(Palette.elevated, in: Capsule())
-            }
-            .padding(.top, 8)
+            Text(String(localized: "陀螺空鼠"))
+                .font(.system(size: 22, weight: .semibold))
+                .padding(.top, 8)
             HStack(alignment: .center, spacing: 22) {
                 pebble
                 Button(action: model.recenterAirMouse) {
@@ -168,12 +161,7 @@ struct AirMouseView: View {
     }
 
     @ViewBuilder private var displayPicker: some View {
-        if model.receiverState.displays.isEmpty {
-            Text(String(localized: "选择电视屏幕"))
-                .font(.footnote)
-                .foregroundStyle(Palette.muted)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
+        if !model.receiverState.displays.isEmpty {
             Picker(String(localized: "选择电视屏幕"), selection: Binding(
                 get: { model.selectedRemoteDisplayID ?? "" },
                 set: { model.selectRemoteDisplay($0) }
@@ -183,7 +171,9 @@ struct AirMouseView: View {
                 }
             }
             .pickerStyle(.menu)
+            .labelsHidden()
             .tint(Palette.mint)
+            .accessibilityLabel(String(localized: "选择电视屏幕"))
             .accessibilityIdentifier("airMouseDisplayPicker")
         }
     }
