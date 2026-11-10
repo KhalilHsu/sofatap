@@ -387,8 +387,69 @@ struct RemoteView: View {
         return platform == "macos" ? "laptopcomputer" : "desktopcomputer"
     }
 
-    private var header: some View {
-        HStack(alignment: .top, spacing: 8) {
+    @ViewBuilder
+    private var deviceButton: some View {
+        if showsAirMouse {
+            // Air mouse keeps the page to one stone, so the display choice,
+            // recenter and sensitivity live in this menu.
+            Menu {
+                Button {
+                    stopInteraction()
+                    pairingSheet = true
+                } label: { Label(String(localized: "设备与配对"), systemImage: "link") }
+                if !model.receiverState.displays.isEmpty {
+                    Menu {
+                        ForEach(model.receiverState.displays) { display in
+                            Button {
+                                model.selectRemoteDisplay(display.id)
+                            } label: {
+                                if display.id == model.selectedRemoteDisplayID {
+                                    Label(AirMouseView.displayLabel(display), systemImage: "checkmark")
+                                } else {
+                                    Text(AirMouseView.displayLabel(display))
+                                }
+                            }
+                        }
+                    } label: { Label(String(localized: "电视屏幕"), systemImage: "display") }
+                }
+                Button {
+                    model.recenterAirMouse()
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                } label: { Label(String(localized: "光标回中"), systemImage: "scope") }
+                .disabled(!model.airMouseCanRecenter)
+                Button {
+                    stopInteraction()
+                    gestureSettingsTarget = gestureTarget
+                    gestureSettingsSheet = true
+                } label: { Label(String(localized: "灵敏度与手势"), systemImage: "slider.horizontal.3") }
+            } label: {
+                HStack(spacing: 9) {
+                    Image(uiImage: Self.brandImage)
+                        .resizable().scaledToFit().frame(width: 38, height: 38)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 5) {
+                            Image(systemName: deviceSymbol).font(.system(size: 12))
+                            Text(currentDeviceName).font(.system(size: 14, weight: .semibold)).lineLimit(1)
+                            Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+                        }
+                        HStack(spacing: 4) {
+                            Image(systemName: statusSymbol).font(.system(size: 8, weight: .bold))
+                            Text(connectionLabel).font(.system(size: 11)).lineLimit(2)
+                        }.foregroundStyle(statusColor)
+                    }
+                }
+                .foregroundStyle(.white)
+                .frame(minHeight: 44, alignment: .leading)
+                .padding(.horizontal, 8).padding(.vertical, 5)
+                .background(Palette.background.opacity(0.78), in: RoundedRectangle(cornerRadius: 16))
+                .contentShape(RoundedRectangle(cornerRadius: 16))
+            }
+            .onTapGesture { UISelectionFeedbackGenerator().selectionChanged() }
+            .accessibilityLabel(String(localized: "配对设备与连接设置"))
+            .accessibilityValue(currentDeviceName + ", " + connectionLabel)
+            .accessibilityIdentifier("pairingButton")
+        } else {
             Button {
                 stopInteraction()
                 UISelectionFeedbackGenerator().selectionChanged()
@@ -420,6 +481,12 @@ struct RemoteView: View {
             .accessibilityLabel(String(localized: "配对设备与连接设置"))
             .accessibilityValue(currentDeviceName + ", " + connectionLabel)
             .accessibilityIdentifier("pairingButton")
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .top, spacing: 8) {
+            deviceButton
             Spacer(minLength: 0)
             Button {
                 stopInteraction()
@@ -459,9 +526,11 @@ struct RemoteView: View {
                                      startPoint: .topLeading, endPoint: .bottomTrailing))
                 .allowsHitTesting(false)
             if showsAirMouse {
+                // 16 pt of dead space above the bottom bar so a blind thumb
+                // does not slide from the stone onto a button.
                 AirMouseView(model: model)
                     .padding(.top, 146)
-                    .padding(.bottom, 78)
+                    .padding(.bottom, 94)
                     .transition(.opacity)
             } else {
             TouchSurface(enabled: inputEnabled && !tvNavigationSelected, control: touchControl,
@@ -546,6 +615,14 @@ struct RemoteView: View {
             // Text elsewhere continues to follow the selected language's direction.
             bottomBar.environment(\.layoutDirection, .leftToRight)
                 .padding(.horizontal, 20).padding(.bottom, 20)
+                .simultaneousGesture(DragGesture(minimumDistance: 0)
+                    .onChanged { _ in
+                        // Tell a blind thumb it has left the stone.
+                        guard showsAirMouse, !bottomBarTouched else { return }
+                        bottomBarTouched = true
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    }
+                    .onEnded { _ in bottomBarTouched = false })
         }
         .overlay {
             if televisionSelected {
@@ -1082,6 +1159,7 @@ struct RemoteView: View {
         remoteFocus.reset()
         model.setDesktopControlEnabled(true, reconnect: reconnect)
     }
+    @State private var bottomBarTouched = false
     private var showsAirMouse: Bool { !televisionSelected && remoteSurface == "airMouse" }
 
     private func resumeCurrentInput() {

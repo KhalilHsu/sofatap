@@ -524,3 +524,9 @@
 "按住石子移动光标，松手停止，轻点单击" = "Hold the stone to move the pointer. Release to stop. Tap to click.";
 "按住移动 · 轻点单击" = "Hold to move · Tap to click";
 "电视屏幕" = "TV screen";
+/* Air mouse device menu and shake recenter. */
+"光标回中" = "Recenter pointer";
+"设备与配对" = "Devices and pairing";
+"灵敏度与手势" = "Sensitivity and gestures";
+"摇一摇回中" = "Shake to recenter";
+"手指离开屏幕时摇一下手机，光标回到屏幕中间" = "With your finger off the screen, shake the phone to bring the pointer back to the center";

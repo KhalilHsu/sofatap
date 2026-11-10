@@ -19,30 +19,32 @@ struct AirMouseView: View {
         .onAppear { pushGestureSettings() }
         .onChangeCompat(of: flickRightClick) { _, _ in pushGestureSettings() }
         .onChangeCompat(of: rightHold) { _, _ in pushGestureSettings() }
+        .onChangeCompat(of: storedSweep) { _, value in model.setAirMouseSweepDegrees(value) }
     }
 
     @AppStorage("sofatap.airMouse.flickRightClick") private var flickRightClick = false
     @AppStorage("sofatap.airMouse.rightHold") private var rightHold = 0.6
+    @AppStorage(ControllerModel.airMouseSweepKey) private var storedSweep = AirMouseGain.defaultSweepDegrees
+    @AppStorage("sofatap.airMouse.hintSeen") private var hintSeen = false
+    @State private var showHint = false
 
     private func pushGestureSettings() {
         model.setAirMouseCard(flickRightClick: flickRightClick, rightHold: rightHold)
     }
 
+    /// The page is the toggle and one stone. Display, recenter and
+    /// sensitivity live in the device menu and settings.
     private var controls: some View {
-        VStack(spacing: UIScreen.main.bounds.height <= 700 ? 14 : 22) {
-            VStack(spacing: 14) {
-                pebble
-                HStack(spacing: 8) {
-                    capsuleButton(title: String(localized: "回中"), systemImage: "scope", enabled: model.airMouseCanRecenter, action: model.recenterAirMouse)
-                        .accessibilityIdentifier("airMouseRecenter")
-                    displayMenu
-                }
+        VStack(spacing: 16) {
+            Spacer(minLength: 0)
+            pebble
+            if showHint {
+                Text(airMouseHint)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Palette.muted)
+                    .multilineTextAlignment(.center)
+                    .transition(.opacity)
             }
-            .frame(maxWidth: .infinity)
-            Text(airMouseHint)
-                .font(.system(size: 13))
-                .foregroundStyle(Palette.muted)
-                .multilineTextAlignment(.center)
             if model.connected && !model.receiverState.supportsDisplayCentering {
                 Text(verbatim: ControllerModel.recenterUnsupportedNotice)
                     .font(.system(size: 13, weight: .semibold))
@@ -50,36 +52,16 @@ struct AirMouseView: View {
                     .multilineTextAlignment(.center)
                     .accessibilityIdentifier("airMouseRecenterNotice")
             }
-            VStack(alignment: .leading, spacing: 8) {
-                Text(String(localized: "灵敏度"))
-                    .sofaTextStyle(.subheadline, weight: .semibold)
-                Slider(value: Binding(
-                    get: { AirMouseGain.sensitivitySliderPosition(sweepDegrees: model.airMouseSweepDegrees) },
-                    set: { model.setAirMouseSweepDegrees(AirMouseGain.sweepDegrees(sensitivitySliderPosition: $0)) }
-                ), in: AirMouseGain.minimumSweepDegrees...AirMouseGain.maximumSweepDegrees, step: 1)
-                .tint(Palette.mint)
-                .accessibilityLabel(String(localized: "灵敏度"))
-                .accessibilityHint(String(localized: "手腕转一点，光标走多远"))
-                HStack {
-                    Text(String(localized: "慢"))
-                    Spacer()
-                    Text(String(localized: "快"))
-                }
-                .font(.caption)
-                .foregroundStyle(Palette.muted)
-                .accessibilityHidden(true)
-                Text(String(localized: "手腕转一点，光标走多远"))
-                    .font(.caption)
-                    .foregroundStyle(Palette.muted)
-            }
-            .padding(16)
-            .background(Palette.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 22)
         .padding(.top, 24)
-        .padding(.bottom, 18)
+        .padding(.bottom, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            // The hint shows only on the first visit.
+            if !hintSeen { showHint = true; hintSeen = true }
+        }
         .onAppear { if scenePhase == .active { model.startAirMouseSession() } }
         .onDisappear { model.stopAirMouse() }
         .onChangeCompat(of: scenePhase) { _, phase in
@@ -98,47 +80,9 @@ struct AirMouseView: View {
         return String(localized: "按住石子移动光标，松手停止，轻点单击")
     }
 
-    private func capsuleButton(title: String, systemImage: String, enabled: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: systemImage).font(.system(size: 14, weight: .semibold))
-                Text(title).font(.system(size: 14, weight: .semibold))
-            }
-            .padding(.horizontal, 14)
-            .frame(height: 36)
-            .foregroundStyle(enabled ? .white : Palette.muted)
-            .background(Palette.panel, in: Capsule())
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-    }
-
-    private var displayMenu: some View {
-        Menu {
-            if model.receiverState.displays.isEmpty {
-                Button(String(localized: "选择电视屏幕")) {}
-            } else {
-                ForEach(model.receiverState.displays) { display in
-                    Button(displayLabel(display)) { model.selectRemoteDisplay(display.id) }
-                }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Text(String(localized: "电视屏幕")).font(.system(size: 14, weight: .semibold))
-                Image(systemName: "chevron.down").font(.system(size: 11, weight: .semibold))
-            }
-            .padding(.horizontal, 14)
-            .frame(height: 36)
-            .foregroundStyle(model.receiverState.displays.isEmpty ? Palette.muted : .white)
-            .background(Palette.panel, in: Capsule())
-        }
-        .disabled(model.receiverState.displays.isEmpty)
-        .accessibilityIdentifier("airMouseDisplayPicker")
-    }
-
     private var pebble: some View {
         let choice = model.airMouseAppearance
-        let longEdge: CGFloat = UIScreen.main.bounds.height <= 700 ? 180 : 230
+        let longEdge: CGFloat = UIScreen.main.bounds.height <= 700 ? 240 : 300
         let lit = model.airMoving
         let motion = reduceMotion ? Animation.easeOut(duration: 0.1) : (lit ? .easeOut(duration: 0.14) : .easeOut(duration: 0.2))
         return TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { timeline in
@@ -199,7 +143,7 @@ struct AirMouseView: View {
         return (0.5 + roll * 0.007, 0.5 - pitch * 0.007)
     }
 
-    private func displayLabel(_ display: RemoteDisplay) -> String {
+    static func displayLabel(_ display: RemoteDisplay) -> String {
         let scale = display.scale == display.scale.rounded() ? "\(Int(display.scale))x" : String(format: "%.1fx", display.scale)
         let size = "\(display.width)×\(display.height) · \(scale)"
         guard display.isMain else { return size }

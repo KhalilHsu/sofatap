@@ -520,3 +520,9 @@
 "按住石子移动光标，松手停止，轻点单击" = "Tahan batu untuk menggerakkan kursor. Lepas untuk berhenti. Ketuk untuk klik.";
 "按住移动 · 轻点单击" = "Tahan untuk bergerak · Ketuk untuk klik";
 "电视屏幕" = "Layar TV";
+/* Air mouse device menu and shake recenter. */
+"光标回中" = "Pusatkan penunjuk";
+"设备与配对" = "Perangkat dan pemasangan";
+"灵敏度与手势" = "Sensitivitas dan gestur";
+"摇一摇回中" = "Goyang untuk memusatkan";
+"手指离开屏幕时摇一下手机，光标回到屏幕中间" = "Tanpa menyentuh layar, goyangkan ponsel untuk mengembalikan penunjuk ke tengah";

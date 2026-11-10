@@ -175,6 +175,10 @@ final class ControllerModel: ObservableObject {
     private var queuedMovementStart = -Double.infinity
     private var lastScroll = Date.distantPast
     private let motion = CMMotionManager()
+    private var shakeDetector = AirMouseShakeDetector()
+    private var airFingerUpTime = -Double.infinity
+    static let airMouseSweepKey = "sofatap.airMouse.sweepDegrees"
+    static let airMouseShakeRecenterKey = "sofatap.airMouse.shakeRecenter"
     private var airTracker = AirMouseTracker()
     private var cardGesture = AirMouseCardGesture()
     private let lastAirMouseStoneKey = "sofatap.airMouse.lastStone"
@@ -1475,6 +1479,10 @@ final class ControllerModel: ObservableObject {
         airSession = true
         airTracker = AirMouseTracker()
         cardGesture = AirMouseCardGesture()
+        shakeDetector.reset()
+        if let stored = UserDefaults.standard.object(forKey: Self.airMouseSweepKey) as? Double {
+            airMouseSweepDegrees = AirMouseGain.clampSweep(stored)
+        }
         syncAirMouseMapping()
         pickAirMouseStone()
         noteDisplays()
@@ -1501,6 +1509,7 @@ final class ControllerModel: ObservableObject {
     func airMouseFingerUp() {
         guard airMoving else { return }
         airMoving = false
+        airFingerUpTime = ProcessInfo.processInfo.systemUptime
         queuedDX = 0
         queuedDY = 0
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
@@ -1516,6 +1525,7 @@ final class ControllerModel: ObservableObject {
 
     func setAirMouseSweepDegrees(_ value: Double) {
         airMouseSweepDegrees = AirMouseGain.clampSweep(value)
+        UserDefaults.standard.set(airMouseSweepDegrees, forKey: Self.airMouseSweepKey)
         syncAirMouseMapping()
     }
 
@@ -1602,6 +1612,7 @@ final class ControllerModel: ObservableObject {
                 _ = self.airTracker.ingest(sample)
                 self.airMousePitch = self.airTracker.pitch
                 self.airMouseRoll = self.airTracker.roll
+                self.detectRecenterShake(data)
                 guard self.airMoving, self.canControl else { return }
                 self.airTracker.setHolding(true)
                 self.airTracker.setFrozen(false)
@@ -1610,6 +1621,19 @@ final class ControllerModel: ObservableObject {
                                                             dx: delta.dx, dy: delta.dy, time: self.movementTime))
             }
         }
+    }
+
+    /// A shake with no finger on the card recenters the pointer. Off in settings.
+    private func detectRecenterShake(_ data: CMDeviceMotion) {
+        let enabled = UserDefaults.standard.object(forKey: Self.airMouseShakeRecenterKey) as? Bool ?? true
+        guard enabled, !airMoving, data.timestamp - airFingerUpTime > 0.5 else {
+            shakeDetector.reset()
+            return
+        }
+        let acceleration = Vec3(x: data.userAcceleration.x, y: data.userAcceleration.y, z: data.userAcceleration.z)
+        guard shakeDetector.ingest(time: data.timestamp, acceleration: acceleration), airMouseCanRecenter else { return }
+        recenterAirMouse()
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
     private func syncAirMouseMapping() {

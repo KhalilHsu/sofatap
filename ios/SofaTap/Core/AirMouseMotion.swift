@@ -360,3 +360,49 @@ struct AirMouseContact {
         [.pose(pitch: tracker.pitch, roll: tracker.roll)]
     }
 }
+
+
+/// Recenter shake: a sharp jolt that reverses twice on one axis within
+/// 0.6 s. Picking the phone up or setting it down is one push and one stop,
+/// so it does not count.
+struct AirMouseShakeDetector {
+    var threshold = 1.5
+    var window = 0.6
+    var cooldown = 1.0
+    private var lastSign = 0.0
+    private var lastAxis = -1
+    private var firstPeak = -Double.infinity
+    private var lastPeak = -Double.infinity
+    private var reversals = 0
+    private var lastFire = -Double.infinity
+
+    mutating func reset() {
+        lastSign = 0; lastAxis = -1; reversals = 0
+        firstPeak = -.infinity; lastPeak = -.infinity
+    }
+
+    /// `acceleration` is user acceleration in g. Returns true once per shake.
+    mutating func ingest(time: Double, acceleration a: Vec3) -> Bool {
+        guard time.isFinite, a.x.isFinite, a.y.isFinite, a.z.isFinite else { return false }
+        let values = [a.x, a.y, a.z]
+        var axis = 0
+        for i in 1..<3 where abs(values[i]) > abs(values[axis]) { axis = i }
+        let value = values[axis]
+        guard abs(value) >= threshold else {
+            if time - lastPeak > window { reset() }
+            return false
+        }
+        let sign: Double = value > 0 ? 1 : -1
+        if axis == lastAxis, sign != lastSign, time - lastPeak <= window {
+            reversals += 1
+        } else if axis != lastAxis || time - lastPeak > window {
+            reversals = 0
+            firstPeak = time
+        }
+        lastAxis = axis; lastSign = sign; lastPeak = time
+        guard reversals >= 2, time - firstPeak <= window, time - lastFire >= cooldown else { return false }
+        lastFire = time
+        reset()
+        return true
+    }
+}

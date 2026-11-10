@@ -13,6 +13,7 @@ struct AirMouseMotionTests {
         attitudeChecks(check)
         contactChecks(check)
         highlightChecks(check)
+        shakeChecks(check)
         print("PASS \(passed) air-mouse motion checks (no device motion)")
     }
 
@@ -231,6 +232,22 @@ struct AirMouseMotionTests {
         // Device x is the pitch axis while roll is zero. Add it without changing the vertical component.
         let rate = up.scaled(yawRate)
         return AirMouseSample(time: time, gravity: g, rotationRate: Vec3(x: rate.x + pitchRate, y: rate.y, z: rate.z))
+    }
+
+    static func shakeChecks(_ check: (String, Bool) -> Void) {
+        func run(_ samples: [(Double, Double)]) -> Int {
+            var detector = AirMouseShakeDetector()
+            return samples.filter { detector.ingest(time: $0.0, acceleration: Vec3(x: $0.1, y: 0, z: 0)) }.count
+        }
+        check("a quick back-and-forth shake recenters once", run([(0, 2), (0.08, -2.2), (0.16, 2.1), (0.24, -2)]) == 1)
+        check("one push, like picking the phone up, does not recenter", run([(0, 2), (0.05, 2.4), (0.1, 1.8), (0.2, 0.2)]) == 0)
+        check("a push and a stop, like setting it down, does not recenter", run([(0, -1.8), (0.2, 1.9), (0.5, 0.1)]) == 0)
+        check("gentle wobble below the threshold is ignored", run([(0, 0.9), (0.1, -1.0), (0.2, 1.1), (0.3, -0.9)]) == 0)
+        check("slow reversals outside the window do not add up", run([(0, 2), (0.7, -2), (1.4, 2)]) == 0)
+        check("a long shake fires once per cooldown",
+              run([(0, 2), (0.08, -2), (0.16, 2), (0.24, -2), (0.32, 2), (0.4, -2), (0.48, 2)]) == 1)
+        var odd = AirMouseShakeDetector()
+        check("non-finite samples are ignored", !odd.ingest(time: .nan, acceleration: Vec3(x: 3, y: 0, z: 0)))
     }
 
     static func travel(_ outputs: [AirMouseContact.Output]) -> Double {

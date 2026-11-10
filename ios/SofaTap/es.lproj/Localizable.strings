@@ -520,3 +520,9 @@
 "按住石子移动光标，松手停止，轻点单击" = "Mantén la piedra para mover el cursor. Suelta para parar. Toca para hacer clic.";
 "按住移动 · 轻点单击" = "Mantén para mover · Toca para clic";
 "电视屏幕" = "Pantalla del televisor";
+/* Air mouse device menu and shake recenter. */
+"光标回中" = "Centrar puntero";
+"设备与配对" = "Dispositivos y emparejamiento";
+"灵敏度与手势" = "Sensibilidad y gestos";
+"摇一摇回中" = "Agitar para centrar";
+"手指离开屏幕时摇一下手机，光标回到屏幕中间" = "Sin tocar la pantalla, agita el teléfono para llevar el puntero al centro";
