@@ -6,7 +6,7 @@ struct SofaNavigationStack<Content: View>: View {
 
     var body: some View {
         if #available(iOS 16, *) {
-            NavigationStack(content: content)
+            NavigationStack(root: content)
         } else {
             NavigationView(content: content)
                 .navigationViewStyle(.stack)
