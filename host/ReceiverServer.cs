@@ -15,6 +15,14 @@ public sealed class ReceiverServer(ReceiverOptions options, Credentials credenti
     Func<ILiveTextEditor>? textEditorFactory = null, ISystemVolume? systemVolume = null)
 {
     private readonly SemaphoreSlim _controller = new(1, 1);
+    // A live controller pings every 0.75 s (5 s on legacy phones). A session that
+    // has been silent this long is a dead route (for example a stalled peer-to-peer
+    // link whose FIN never arrived); a new authenticated connection may replace it
+    // instead of getting 409 until the 20 s idle timeout.
+    internal static readonly TimeSpan StaleControllerAfter = TimeSpan.FromSeconds(6);
+    private readonly object _activeLock = new();
+    private CancellationTokenSource? _activeController;
+    private long _lastControllerFrame;
     private readonly CachedSystemVolume? _volume = options.DryRun || systemVolume is null ? null : new(systemVolume);
     private static readonly JsonSerializerOptions JsonOptions = LiveTextWire.Options;
     private readonly byte[] _token = Encoding.ASCII.GetBytes(credentials.Token);
@@ -50,7 +58,7 @@ public sealed class ReceiverServer(ReceiverOptions options, Credentials credenti
         if (context.Request.Headers.ContainsKey("Origin")) { context.Response.StatusCode = 403; return; }
         if (!Authorized(context.Request)) { context.Response.StatusCode = 401; return; }
         if (!context.WebSockets.IsWebSocketRequest) { context.Response.StatusCode = 400; return; }
-        if (!await _controller.WaitAsync(0, context.RequestAborted)) { context.Response.StatusCode = 409; return; }
+        if (!await AcquireController(context.RequestAborted)) { context.Response.StatusCode = 409; return; }
         try
         {
             using var socket = await context.WebSockets.AcceptWebSocketAsync();
@@ -59,6 +67,14 @@ public sealed class ReceiverServer(ReceiverOptions options, Credentials credenti
         catch (OperationCanceledException) { }
         catch (WebSocketException) { }
         finally { input.ReleaseAll(); _controller.Release(); }
+    }
+    private async Task<bool> AcquireController(CancellationToken cancellation)
+    {
+        if (await _controller.WaitAsync(0, cancellation)) return true;
+        var silentFor = TimeSpan.FromMilliseconds(Environment.TickCount64 - Interlocked.Read(ref _lastControllerFrame));
+        if (silentFor < StaleControllerAfter) return false;
+        lock (_activeLock) { _activeController?.Cancel(); }
+        return await _controller.WaitAsync(TimeSpan.FromSeconds(3), cancellation);
     }
     private bool Authorized(HttpRequest request)
     {
@@ -107,7 +123,16 @@ public sealed class ReceiverServer(ReceiverOptions options, Credentials credenti
 
     private async Task RunController(WebSocket socket, CancellationToken requestAborted)
     {
-        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(requestAborted, _applicationStopping);
+        using var replaced = new CancellationTokenSource();
+        lock (_activeLock) { _activeController = replaced; }
+        Interlocked.Exchange(ref _lastControllerFrame, Environment.TickCount64);
+        try { await RunController(socket, requestAborted, replaced.Token); }
+        finally { lock (_activeLock) { if (ReferenceEquals(_activeController, replaced)) _activeController = null; } }
+    }
+
+    private async Task RunController(WebSocket socket, CancellationToken requestAborted, CancellationToken replaced)
+    {
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(requestAborted, _applicationStopping, replaced);
         var focusTracker = new TextFocusTracker();
         TextFocusMetadata Focus(string code) => focusTracker.Update(
             ReceiverDistribution.SupportsTextInspection && code == "ready" && !options.DryRun && textFocus is not null
@@ -140,6 +165,7 @@ public sealed class ReceiverServer(ReceiverOptions options, Credentials credenti
                     offset += received.Count;
                     if (offset > Protocol.MaximumFrameBytes) { await Close(socket, WebSocketCloseStatus.MessageTooBig, "Frame exceeds 64 KiB."); return; }
                 } while (!received.EndOfMessage);
+                Interlocked.Exchange(ref _lastControllerFrame, Environment.TickCount64);
                 var bytes = buffer.AsMemory(0, offset);
                 ActionAck ack;
                 bool isPing = false;

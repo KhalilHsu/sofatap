@@ -230,6 +230,9 @@ struct RemoteView: View {
             else { androidTV.becameInactive() }
             if model.textDelivery == .uncertain { composerVisible = true }
             applyRemoteFocus()
+#if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--soak-typing") { startSoak() }
+#endif
 #if targetEnvironment(simulator)
             if model.demo {
                 gestureSettingsSheet = ProcessInfo.processInfo.arguments.contains("--demo-gestures")
@@ -1506,3 +1509,79 @@ private struct DesktopShortcutPanel: View {
         .accessibilityIdentifier("desktopShortcut_" + shortcut.rawValue)
     }
 }
+
+#if DEBUG
+/// Device soak (Debug builds only, `--soak-typing [--soak-seconds N]`): drives the
+/// real composer UITextView with typed characters, pinyin marked text and injected
+/// keyboard-dictation sessions while the system keyboard is up, and logs connection
+/// changes as `SOFATAP_SOAK` lines in the device log. No microphone is used.
+@MainActor extension RemoteView {
+    fileprivate func soak(_ op: String, _ text: String = "") {
+        NotificationCenter.default.post(name: NativeDraftEditor.soakNotification, object: nil, userInfo: ["op": op, "text": text])
+    }
+    func startSoak() {
+        Task { @MainActor in
+            let args = ProcessInfo.processInfo.arguments
+            let seconds = args.firstIndex(of: "--soak-seconds").flatMap { $0 + 1 < args.count ? Double(args[$0 + 1]) : nil } ?? 300
+            @MainActor func log(_ line: String) { NSLog("SOFATAP_SOAK %@", line) }
+            func pause(_ s: Double) async { try? await Task.sleep(nanoseconds: UInt64(s * 1_000_000_000)) }
+            var waited = 0.0
+            while !(model.connected && model.inputAvailable) && waited < 60 { await pause(0.25); waited += 0.25 }
+            log("ready connected=\(model.connected) input=\(model.inputAvailable) peer=\(model.usesPeerTransport) live=\(model.usesLiveText) after=\(waited)s")
+            composerVisible = true; keyboardFocused = true
+            model.openTextEditor()
+            await pause(2)
+            var disconnects = 0, lastConnected = model.connected, lastPeer = model.usesPeerTransport
+            var counts: [String: (ok: Int, total: Int)] = [:]
+            let started = Date()
+            @MainActor func note(_ kind: String, _ ok: Bool) {
+                var c = counts[kind] ?? (0, 0); c.total += 1; if ok { c.ok += 1 }; counts[kind] = c
+                let tail = String(model.draft.suffix(24)), status = "\(model.liveTextStatus)", delivery = "\(model.textDelivery)"
+                log("\(kind) ok=\(ok) draft=\(tail) live=\(status) delivery=\(delivery)")
+            }
+            let monitor = Task { @MainActor in
+                while !Task.isCancelled {
+                    if model.connected != lastConnected || model.usesPeerTransport != lastPeer {
+                        if lastConnected && !model.connected { disconnects += 1 }
+                        log("link connected=\(model.connected) peer=\(model.usesPeerTransport) t=\(Int(Date().timeIntervalSince(started)))s notice=\(model.notice)")
+                        lastConnected = model.connected; lastPeer = model.usesPeerTransport
+                    }
+                    await pause(0.1)
+                }
+            }
+            @MainActor func settled(_ expected: String) async -> Bool {
+                for _ in 0..<30 {
+                    let draft = model.draft, composing = model.composing, ready = model.liveTextStatus == .active
+                    if draft.hasSuffix(expected) && !composing && ready { return true }
+                    await pause(0.1)
+                }
+                return false
+            }
+            var cycle = 0
+            while Date().timeIntervalSince(started) < seconds {
+                cycle += 1
+                // 1. keyboard typing, one character at a time.
+                let word = "type\(cycle) "
+                for ch in word { soak("type", String(ch)); await pause(0.12) }
+                note("typing", await settled(word))
+                // 2. pinyin: marked increments, then the candidate commits.
+                for m in ["n", "ni", "nih", "niha", "nihao"] { soak("mark", m); await pause(0.15) }
+                soak("type", "你好"); note("pinyin", await settled("你好"))
+                // 3. Chinese dictation: provisional chunks, whole replacement, end.
+                soak("dictStart"); for chunk in ["今天", "天气"] { soak("type", chunk); await pause(0.3) }
+                soak("replaceTail", "今天天气很好。"); await pause(0.3); soak("dictEnd")
+                note("dictation-zh", await settled("今天天气很好。"))
+                // 4. English dictation.
+                soak("dictStart"); for chunk in ["hello", " world"] { soak("type", chunk); await pause(0.3) }
+                soak("replaceTail", " Hello world."); await pause(0.3); soak("dictEnd")
+                note("dictation-en", await settled(" Hello world."))
+                if Date().timeIntervalSince(started) + 20 < seconds { soak("clear"); await pause(0.8) }
+                log("cycle=\(cycle) t=\(Int(Date().timeIntervalSince(started)))s disconnects=\(disconnects)")
+            }
+            monitor.cancel()
+            let summary = counts.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value.ok)/\($0.value.total)" }.joined(separator: " ")
+            log("done seconds=\(Int(Date().timeIntervalSince(started))) cycles=\(cycle) disconnects=\(disconnects) peer=\(model.usesPeerTransport) \(summary)")
+        }
+    }
+}
+#endif

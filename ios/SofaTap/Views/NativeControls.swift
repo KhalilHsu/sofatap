@@ -59,6 +59,9 @@ struct NativeDraftEditor: UIViewRepresentable {
         func flushForSend() -> Bool { coordinator?.flushForSend() ?? false }
     }
 
+#if DEBUG
+    static let soakNotification = Notification.Name("SofaTapSoak")
+#endif
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeUIView(context: Context) -> UITextView {
         let view = TextView()
@@ -114,6 +117,9 @@ struct NativeDraftEditor: UIViewRepresentable {
             }
             didSet {
                 lastObservedNativeText = textView?.text ?? ""
+#if DEBUG
+                attachSoak()
+#endif
                 (textView as? TextView)?.onEmptyBackspace = { [weak self] in self?.emptyBackspace() }
                 (textView as? TextView)?.onDictationChange = { [weak self] in self?.nativeChangedOutsideDelegate() }
                 modeObserver = NotificationCenter.default.addObserver(
@@ -132,6 +138,30 @@ struct NativeDraftEditor: UIViewRepresentable {
         }
         private var storageObserver: NSObjectProtocol?
         private var modeObserver: NSObjectProtocol?
+#if DEBUG
+        private var soakObserver: NSObjectProtocol?
+        func attachSoak() {
+            guard soakObserver == nil, ProcessInfo.processInfo.arguments.contains("--soak-typing") else { return }
+            soakObserver = NotificationCenter.default.addObserver(forName: NativeDraftEditor.soakNotification, object: nil, queue: .main) { [weak self] note in
+                guard let view = self?.textView as? TextView, let op = note.userInfo?["op"] as? String else { return }
+                let text = note.userInfo?["text"] as? String ?? ""
+                switch op {
+                case "type": view.insertText(text)
+                case "mark": view.setMarkedText(text, selectedRange: NSRange(location: text.utf16.count, length: 0))
+                case "dictStart": view.simulateDictation(true); self?.dictationStart = view.selectedRange.location
+                case "replaceTail":
+                    let start = self?.dictationStart ?? view.selectedRange.location
+                    let end = view.selectedRange.location
+                    if end >= start { view.textStorage.replaceCharacters(in: NSRange(location: start, length: end - start), with: text)
+                        view.selectedRange = NSRange(location: start + text.utf16.count, length: 0) }
+                case "dictEnd": view.simulateDictation(false)
+                case "clear": view.selectAll(nil); view.deleteBackward()
+                default: break
+                }
+            }
+        }
+        private var dictationStart: Int?
+#endif
         private func isComposing(_ view: UITextView) -> Bool {
             (view as? TextView)?.composingInput ?? (view.markedTextRange != nil)
         }

@@ -41,6 +41,7 @@ WindowsLiveTextChecks.Run(Check);
 MacTextEditorChecks.Run(Check);
 #endif
 await LiveTextWireChecks.Run(Check);
+await ControllerTakeoverChecks.Run(Check);
 
 // Stable peer identity must survive absence of advertisable LAN addresses.
 var peerProfile = Path.Combine(Path.GetTempPath(), "sofatap-peer-state-" + Guid.NewGuid().ToString("N"));

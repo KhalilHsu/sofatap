@@ -343,6 +343,43 @@ struct PairingAttemptTests {
         check("drag-release button timeout cannot suppress reconnection", !dragTimeout.model.connected && dragTimeout.scheduled.count == 3)
         dragTimeout.scheduled.last!.fire(); dragTimeout.model.testConnectionEstablished()
         check("recovery clears final drag-release gate", dragTimeout.model.canControl && !dragTimeout.model.dragging)
+        // Route learning: a dead peer route is not retried; a verified LAN goes first.
+        let routeSuite = "Sofatap-route-test-" + UUID().uuidString
+        let routeDefaults = UserDefaults(suiteName: routeSuite)!
+        defer { routeDefaults.removePersistentDomain(forName: routeSuite) }
+        var routePrepared: [(UInt16?) -> Void] = []
+        var routeOpened = 0
+        var routeRetries: [() -> Void] = []
+        func routeModel() -> ControllerModel {
+            ControllerModel(testPairingLibrary: stagedLibrary, testPairingWrite: { _ in stagedLibrary },
+                testPairingConnect: { _ in routeOpened += 1 },
+                testScheduleReconnect: { _, retry in routeRetries.append(retry) },
+                testPrepareConnection: { routePrepared.append($0) }, testConnectionDefaults: routeDefaults)
+        }
+        let route = routeModel()
+        route.connect()
+        check("unknown pairing tries peer first", routePrepared.count == 1 && routeOpened == 0)
+        routePrepared[0](12360); route.testConnectionEstablished()
+        check("route fixture starts on peer", route.usesPeerTransport)
+        route.testTransportFailure(); routeRetries.last!()
+        check("stalled peer recovers over LAN", routePrepared.count == 1 && routeOpened == 2)
+        route.testConnectionEstablished()
+        check("LAN recovery is plain LAN", route.connected && !route.usesPeerTransport)
+        route.testTransportFailure(); routeRetries.last!()
+        check("after a peer failure, later automatic reconnects stay on LAN", routePrepared.count == 1 && routeOpened == 3)
+        route.testConnectionEstablished()
+        let relaunched = routeModel()
+        relaunched.connect()
+        check("verified LAN goes first on the next launch", routePrepared.count == 1 && routeOpened == 4)
+        relaunched.testTransportFailure(); routeRetries.last!()
+        check("a LAN attempt that never reached hello falls back to peer", routePrepared.count == 2 && routeOpened == 4)
+        routePrepared[1](12361); relaunched.testConnectionEstablished()
+        check("peer fallback connects", relaunched.usesPeerTransport)
+        relaunched.disconnectDevice()
+        relaunched.setConnectionMode(.wifi); relaunched.setConnectionMode(.automatic)
+        relaunched.connect()
+        check("choosing automatic again forgets the learned route", routePrepared.count == 3)
+        relaunched.disconnectDevice()
         print("Pairing attempt tests: \(passed) passed")
     }
 }

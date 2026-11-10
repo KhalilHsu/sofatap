@@ -141,6 +141,8 @@ final class ControllerModel: ObservableObject {
         let reconnect = connected || connecting || reconnectID != nil
         connectionMode = mode
         if !demo { connectionDefaults?.set(mode.rawValue, forKey: Self.connectionModeKey) }
+        // An explicit route choice re-evaluates the route from scratch.
+        forgetLearnedRoute()
         // A route change ends the gesture/session; no pending input crosses routes.
         disconnect()
         if reconnect && !demo { connect() }
@@ -149,6 +151,19 @@ final class ControllerModel: ObservableObject {
     var usesPeerTransport: Bool { connected && peerConnectionAttempt }
     private var peerConnectionAttempt = false
     private var preferLANForNextAttempt = false
+    /// Route learning for automatic mode. The peer-to-peer (AWDL) route measured
+    /// ~570 ms smoothed RTT with >10 s stalls on an iPhone 7 while the same Mac's
+    /// LAN path was 4 ms, so a pairing whose LAN path has worked goes LAN first,
+    /// and a peer route that failed is not retried until the user reconnects.
+    private var peerRouteFailed: String?
+    private var lanRouteFailed: String?
+    private static func lanRouteKey(_ pairing: Pairing) -> String { "sofatap.lanRouteVerified." + pairing.fingerprint.lowercased() }
+    private func lanRouteVerified(_ pairing: Pairing) -> Bool { connectionDefaults?.bool(forKey: Self.lanRouteKey(pairing)) == true || lanVerifiedInSession == pairing.fingerprint }
+    private var lanVerifiedInSession: String?
+    private func forgetLearnedRoute() {
+        peerRouteFailed = nil; lanRouteFailed = nil; lanVerifiedInSession = nil
+        if let pairing { connectionDefaults?.removeObject(forKey: Self.lanRouteKey(pairing)) }
+    }
     private var routePreparation: Task<Void, Never>?
     private var peerDiscovery: PeerTransportDiscovery?
     private var peerBridge: PeerTLSBridge?
@@ -650,6 +665,8 @@ final class ControllerModel: ObservableObject {
 
     func connect() {
         manualConnectionPaused = false
+        // A manual reconnect may try the peer route again.
+        peerRouteFailed = nil; lanRouteFailed = nil
         automaticReconnectBlocked = false
         cancelReconnect()
         startConnection()
@@ -676,7 +693,11 @@ final class ControllerModel: ObservableObject {
         inputAvailable = false
         receiverState = ReceiverState()
         notice = String(localized: "正在验证电脑证书与配对凭据…")
-        let skipPeer = connectionMode == .wifi || preferLANForNextAttempt
+        let fingerprint = pairing.fingerprint
+        let skipPeer: Bool
+        if connectionMode == .wifi || preferLANForNextAttempt { skipPeer = true }
+        else if lanRouteFailed == fingerprint { skipPeer = false }
+        else { skipPeer = peerRouteFailed == fingerprint || lanRouteVerified(pairing) }
         preferLANForNextAttempt = false
 #if SOFATAP_CONTROLLER_TESTING
         if !skipPeer, let testPrepareConnection {
@@ -798,6 +819,14 @@ final class ControllerModel: ObservableObject {
         // A failed peer route should not delay recovery by rediscovering the same
         // unavailable path, even when it previously completed authentication.
         let retryWithLAN = retryable && peerConnectionAttempt
+        if let fingerprint = pairing?.fingerprint, connectionMode == .automatic {
+            if peerConnectionAttempt { peerRouteFailed = fingerprint; lanRouteFailed = nil }
+            else if connecting && lanRouteFailed != fingerprint {
+                // LAN never reached hello: let the next automatic attempt use peer.
+                lanRouteFailed = fingerprint
+                if peerRouteFailed == fingerprint { peerRouteFailed = nil }
+            }
+        }
         disconnect(message: message, preservingRetryAttempt: true)
         preferLANForNextAttempt = retryWithLAN
         if retryable { scheduleReconnect() }
@@ -933,6 +962,10 @@ final class ControllerModel: ObservableObject {
             helloTimeout = nil
             connecting = false
             connected = true
+            if !peerConnectionAttempt, let pairing {
+                lanRouteFailed = nil; lanVerifiedInSession = pairing.fingerprint
+                connectionDefaults?.set(true, forKey: Self.lanRouteKey(pairing))
+            }
             cancelReconnect()
             automaticReconnectBlocked = false
             receiverState = state
