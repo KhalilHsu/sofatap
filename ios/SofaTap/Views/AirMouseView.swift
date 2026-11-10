@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Temporary gyro entry. The pebble is a stand-in for the later visual design:
 /// a dark stone at rest, amber while the finger is down, with a highlight that
@@ -9,6 +10,26 @@ struct AirMouseView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
+        ZStack {
+            AirMouseTouchLayer(onDown: { model.airMouseFingerDown(x: Double($0.x), y: Double($0.y)) },
+                               onMove: { model.airMouseFingerMove(x: Double($0.x), y: Double($0.y)) },
+                               onUp: { model.airMouseFingerUp() },
+                               onCancel: { model.airMouseExtraFinger() })
+            controls
+        }
+        .onAppear { pushGestureSettings() }
+        .onChange(of: flickRightClick) { _, _ in pushGestureSettings() }
+        .onChange(of: rightHold) { _, _ in pushGestureSettings() }
+    }
+
+    @AppStorage("sofatap.airMouse.flickRightClick") private var flickRightClick = false
+    @AppStorage("sofatap.airMouse.rightHold") private var rightHold = 0.6
+
+    private func pushGestureSettings() {
+        model.setAirMouseCard(flickRightClick: flickRightClick, rightHold: rightHold)
+    }
+
+    private var controls: some View {
         VStack(spacing: 22) {
             VStack(spacing: 6) {
                 Text(String(localized: "陀螺空鼠"))
@@ -73,6 +94,23 @@ struct AirMouseView: View {
             }
             .padding(16)
             .background(Palette.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(String(localized: "右键按住时长")).font(.caption.weight(.semibold))
+                    Spacer()
+                    Text(verbatim: String(format: "%.1f s", rightHold))
+                        .font(.caption.monospacedDigit()).foregroundStyle(Palette.mint)
+                }
+                Slider(value: $rightHold, in: 0.5...0.8, step: 0.1)
+                    .tint(Palette.mint)
+                    .accessibilityLabel(String(localized: "右键按住时长"))
+                Toggle(isOn: $flickRightClick) {
+                    Text(String(localized: "横划右键")).font(.caption.weight(.semibold))
+                }
+                .tint(Palette.mint)
+            }
+            .padding(16)
+            .background(Palette.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 22)
@@ -83,7 +121,7 @@ struct AirMouseView: View {
         .onDisappear { model.stopAirMouse() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { model.startAirMouseSession() }
-            else { model.airMouseTouchUp(); model.stopAirMouse() }
+            else { model.airMouseFingerUp(); model.stopAirMouse() }
         }
         .onChange(of: model.connected) { _, _ in
             if scenePhase == .active { model.startAirMouseSession() }
@@ -114,10 +152,7 @@ struct AirMouseView: View {
                 .allowsHitTesting(false)
         }
         .frame(width: 210, height: 168)
-        .contentShape(PebbleShape())
-        .gesture(DragGesture(minimumDistance: 0)
-            .onChanged { _ in model.airMouseTouchDown() }
-            .onEnded { _ in model.airMouseTouchUp() })
+        .allowsHitTesting(false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(String(localized: "按住石子移动光标，松手立刻停止。轻点单击。"))
         .accessibilityAddTraits(.isButton)
@@ -228,5 +263,77 @@ private struct PebbleVeins: Shape {
         path.addQuadCurve(to: CGPoint(x: rect.maxX * 0.8, y: rect.maxY * 0.55),
                           control: CGPoint(x: rect.midX, y: rect.maxY * 0.9))
         return path
+    }
+}
+
+private struct AirMouseTouchLayer: UIViewRepresentable {
+    var onDown: (CGPoint) -> Void
+    var onMove: (CGPoint) -> Void
+    var onUp: () -> Void
+    var onCancel: () -> Void
+
+    func makeUIView(context: Context) -> AirMouseTouchView {
+        let view = AirMouseTouchView()
+        view.onDown = onDown
+        view.onMove = onMove
+        view.onUp = onUp
+        view.onCancel = onCancel
+        return view
+    }
+
+    func updateUIView(_ uiView: AirMouseTouchView, context: Context) {
+        uiView.onDown = onDown
+        uiView.onMove = onMove
+        uiView.onUp = onUp
+        uiView.onCancel = onCancel
+    }
+}
+
+final class AirMouseTouchView: UIView {
+    var onDown: ((CGPoint) -> Void)?
+    var onMove: ((CGPoint) -> Void)?
+    var onUp: (() -> Void)?
+    var onCancel: (() -> Void)?
+    private var active: UITouch?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isMultipleTouchEnabled = true
+        backgroundColor = .clear
+    }
+
+    required init?(coder: NSCoder) { return nil }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        if active != nil || touches.count > 1 || (event?.allTouches?.count ?? 1) > 1 {
+            onCancel?()
+            active = nil
+            return
+        }
+        guard let touch = touches.first else { return }
+        active = touch
+        onDown?(touch.location(in: self))
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let active, touches.contains(active) else { return }
+        if (event?.allTouches?.count ?? 1) > 1 {
+            onCancel?()
+            self.active = nil
+            return
+        }
+        onMove?(active.location(in: self))
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let active, touches.contains(active) else { return }
+        self.active = nil
+        onUp?()
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let active, touches.contains(active) else { return }
+        self.active = nil
+        onCancel?()
     }
 }

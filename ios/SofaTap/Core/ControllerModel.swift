@@ -174,7 +174,8 @@ final class ControllerModel: ObservableObject {
     private var queuedMovementStart = -Double.infinity
     private var lastScroll = Date.distantPast
     private let motion = CMMotionManager()
-    private var airContact = AirMouseContact()
+    private var airTracker = AirMouseTracker()
+    private var cardGesture = AirMouseCardGesture()
     private var airSession = false
     private var airGeneration = UUID()
     private var latestAirSample: AirMouseSample?
@@ -967,7 +968,10 @@ final class ControllerModel: ObservableObject {
 #endif
         let currentGeneration = generation
         let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.flushMovement() }
+            Task { @MainActor in
+                self?.flushMovement()
+                self?.tickAirMouseCard()
+            }
         }
         motionTimer = timer
         RunLoop.main.add(timer, forMode: .common)
@@ -1150,19 +1154,19 @@ final class ControllerModel: ObservableObject {
         }
     }
 
-    func click(_ button: String) {
+    func click(_ button: String, playFeedback: Bool = true) {
         guard canControl else { return }
         endLiveTextEditing()
-        feedback()
+        if playFeedback { feedback() }
         if demo { notice = button == "left" ? String(localized: "演示：左键单击。") : String(localized: "演示：右键单击。"); return }
         send("click", fields: ["button": button])
     }
 
-    func setDragging(_ down: Bool) {
+    func setDragging(_ down: Bool, playFeedback: Bool = true) {
         guard down != dragging, !down || canControl else { return }
         if down { endLiveTextEditing() }
         dragging = down
-        feedback()
+        if playFeedback { feedback() }
         if demo { notice = down ? String(localized: "演示：按住拖拽，再用触控板移动。") : String(localized: "演示：已松开拖拽。"); return }
         if !down {
             // Freeze this gesture's tail before the next run-loop tick or UI
@@ -1466,39 +1470,54 @@ final class ControllerModel: ObservableObject {
     func startAirMouseSession() {
         guard foreground, !airSession else { return }
         airSession = true
-        airContact = AirMouseContact()
+        airTracker = AirMouseTracker()
+        cardGesture = AirMouseCardGesture()
+        syncAirMouseMapping()
         noteDisplays()
         beginAirMotionUpdates()
     }
 
-    func airMouseTouchDown() {
-        guard airSession, foreground, !airMoving else { return }
-        airMoving = true
-        feedback()
-        guard !demo, canControl, let latestAirSample else { return }
-        applyAirOutputs(airContact.begin(latestAirSample), sendMovement: false)
+    func setAirMouseCard(flickRightClick: Bool, rightHold: Double) {
+        cardGesture.config.flickRightClickEnabled = flickRightClick
+        cardGesture.config.rightHold = min(0.8, max(0.5, rightHold.isFinite ? rightHold : 0.6))
     }
 
-    func airMouseTouchUp() {
+    func airMouseFingerDown(x: Double, y: Double) {
+        guard airSession, foreground, !airMoving else { return }
+        airMoving = true
+        applyCardActions(cardGesture.touchDown(at: .init(x: x, y: y), time: movementTime, pitch: airTracker.pitch, yaw: airTracker.yaw))
+    }
+
+    func airMouseFingerMove(x: Double, y: Double) {
+        guard airSession, airMoving else { return }
+        applyCardActions(cardGesture.touchMove(to: .init(x: x, y: y), time: movementTime))
+    }
+
+    func airMouseFingerUp() {
         guard airMoving else { return }
         airMoving = false
-        queuedDX = 0; queuedDY = 0
-        guard !demo, canControl, let latestAirSample else { airContact.cancel(); return }
-        let outputs = airContact.end(latestAirSample)
-        applyAirOutputs(outputs, sendMovement: false)
-        if outputs.contains(.click) { click("left") }
+        queuedDX = 0
+        queuedDY = 0
+        applyCardActions(cardGesture.touchUp(time: movementTime))
+    }
+
+    func airMouseExtraFinger() {
+        airMoving = false
+        queuedDX = 0
+        queuedDY = 0
+        applyCardActions(cardGesture.extraFinger())
     }
 
     func setAirMouseSweepDegrees(_ value: Double) {
         airMouseSweepDegrees = AirMouseGain.clampSweep(value)
-        airContact.setMapping(sweepDegrees: airMouseSweepDegrees, logicalWidth: airMouseLogicalWidth, logicalHeight: airMouseLogicalHeight)
+        syncAirMouseMapping()
     }
 
     func selectRemoteDisplay(_ id: String) {
         guard receiverState.displays.contains(where: { $0.id == id }) else { return }
         guard id != selectedRemoteDisplayID else { return }
         selectedRemoteDisplayID = id
-        airContact.setMapping(sweepDegrees: airMouseSweepDegrees, logicalWidth: airMouseLogicalWidth, logicalHeight: airMouseLogicalHeight)
+        syncAirMouseMapping()
         guard canControl, receiverState.supportsDisplayCentering else { return }
         send("selectDisplay", fields: ["display": id])
     }
@@ -1511,7 +1530,7 @@ final class ControllerModel: ObservableObject {
             }
             return
         }
-        airContact.recenter()
+        airTracker.rebase()
         queuedDX = 0; queuedDY = 0
         send("center", fields: ["display": id])
     }
@@ -1519,7 +1538,7 @@ final class ControllerModel: ObservableObject {
     func stopAirMouse() {
         airGeneration = UUID()
         motion.stopDeviceMotionUpdates()
-        airContact.cancel()
+        applyCardActions(cardGesture.cancel())
         airMoving = false
         airSession = false
         latestAirSample = nil
@@ -1543,7 +1562,7 @@ final class ControllerModel: ObservableObject {
 
     private func noteDisplays() {
         selectedRemoteDisplayID = RemoteDisplay.keeping(selectedRemoteDisplayID, in: receiverState.displays)
-        airContact.setMapping(sweepDegrees: airMouseSweepDegrees, logicalWidth: airMouseLogicalWidth, logicalHeight: airMouseLogicalHeight)
+        syncAirMouseMapping()
         if receiverState.supportsDisplayCentering { announcedMissingDisplayCenter = false }
         else if airSession && connected && !announcedMissingDisplayCenter {
             notice = Self.recenterUnsupportedNotice
@@ -1574,28 +1593,66 @@ final class ControllerModel: ObservableObject {
                     gravity: Vec3(x: data.gravity.x, y: data.gravity.y, z: data.gravity.z),
                     rotationRate: Vec3(x: data.rotationRate.x, y: data.rotationRate.y, z: data.rotationRate.z))
                 self.latestAirSample = sample
-                if self.airMoving && self.airContact.isIdle && self.canControl {
-                    self.applyAirOutputs(self.airContact.begin(sample), sendMovement: false)
-                } else {
-                    self.applyAirOutputs(self.airContact.update(sample), sendMovement: true)
-                }
+                _ = self.airTracker.ingest(sample)
+                self.airMousePitch = self.airTracker.pitch
+                self.airMouseRoll = self.airTracker.roll
+                guard self.airMoving, self.canControl else { return }
+                self.airTracker.setHolding(true)
+                self.airTracker.setFrozen(false)
+                let delta = self.airTracker.consume()
+                self.applyCardActions(self.cardGesture.pose(pitch: self.airTracker.pitch, yaw: self.airTracker.yaw,
+                                                            dx: delta.dx, dy: delta.dy, time: self.movementTime))
             }
         }
     }
 
-    private func applyAirOutputs(_ outputs: [AirMouseContact.Output], sendMovement: Bool) {
-        for output in outputs {
-            switch output {
-            case .pose(let pitch, let roll):
-                airMousePitch = pitch
-                airMouseRoll = roll
-            case .move(let dx, let dy):
-                if sendMovement {
-                    move(dx: dx, dy: dy, gain: 1)
-                    flushMovement()
-                }
-            case .click:
-                break
+    private func syncAirMouseMapping() {
+        airTracker.setMapping(sweepDegrees: airMouseSweepDegrees, logicalWidth: airMouseLogicalWidth, logicalHeight: airMouseLogicalHeight)
+    }
+
+    private func tickAirMouseCard() {
+        guard airSession, cardGesture.needsTick else { return }
+        applyCardActions(cardGesture.tick(movementTime))
+    }
+
+    private func applyCardActions(_ actions: [AirMouseCardGesture.Action]) {
+        for action in actions {
+            switch action {
+            case .pointer(let dx, let dy):
+                move(dx: dx, dy: dy, gain: 1)
+                flushMovement()
+            case .leftClick:
+                click("left", playFeedback: false)
+            case .rightClick:
+                click("right", playFeedback: false)
+            case .drag(let down):
+                setDragging(down, playFeedback: false)
+            case .scroll(let dy):
+                scroll(dy: dy)
+                flushMovement()
+            case .haptic(let kind):
+                playAirMouseHaptic(kind)
+            }
+        }
+    }
+
+    /// Impact generators stay silent when the system Haptics switch is off.
+    private func playAirMouseHaptic(_ kind: AirMouseCardGesture.Haptic) {
+#if SOFATAP_CONTROLLER_TESTING
+        if testSend != nil || testLiveSend != nil || testPairingConnect != nil { return }
+#endif
+        switch kind {
+        case .light:
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        case .medium:
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        case .mediumTwice:
+            let generator = UIImpactFeedbackGenerator(style: .medium)
+            generator.prepare()
+            generator.impactOccurred()
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 60_000_000)
+                generator.impactOccurred()
             }
         }
     }
