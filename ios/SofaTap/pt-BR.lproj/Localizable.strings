@@ -533,3 +533,10 @@
 "或摇一摇" = "ou agite";
 "添加或配对设备" = "Adicionar ou parear dispositivo";
 "仅支持触控板" = "Somente trackpad";
+/* 枯山水 stone names and settings row. */
+"设置" = "Ajustes";
+"玄武岩" = "Basalto";
+"花岗岩" = "Granito";
+"辉长岩" = "Gabro";
+"板岩" = "Ardósia";
+"绿岩" = "Rocha verde";

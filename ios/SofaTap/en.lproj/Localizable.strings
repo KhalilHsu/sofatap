@@ -537,3 +537,10 @@
 "或摇一摇" = "or shake";
 "添加或配对设备" = "Add or pair a device";
 "仅支持触控板" = "Trackpad only";
+/* 枯山水 stone names and settings row. */
+"设置" = "Settings";
+"玄武岩" = "Basalt";
+"花岗岩" = "Granite";
+"辉长岩" = "Gabbro";
+"板岩" = "Slate";
+"绿岩" = "Greenstone";

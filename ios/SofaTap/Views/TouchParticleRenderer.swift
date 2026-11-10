@@ -8,8 +8,11 @@ final class TouchParticleRenderer: NSObject {
     private let halo = CAShapeLayer()
     private let core = CAShapeLayer()
     private let pulse = CAShapeLayer()
-    private let ember = UIColor(red: 0xd4 / 255.0, green: 0x87 / 255.0, blue: 0x4a / 255.0, alpha: 1)
-    private let emberLight = UIColor(red: 0xe3 / 255.0, green: 0xa0 / 255.0, blue: 0x6b / 255.0, alpha: 1)
+    /// Accent: #E39A5E dark, #8A4416 light.
+    private let accent = UIColor { $0.userInterfaceStyle == .light
+        ? UIColor(red: 0x8a / 255.0, green: 0x44 / 255.0, blue: 0x16 / 255.0, alpha: 1)
+        : UIColor(red: 0xe3 / 255.0, green: 0x9a / 255.0, blue: 0x5e / 255.0, alpha: 1) }
+    private var style: UIUserInterfaceStyle = .dark
     private var renderingActive = false
     private var hasContact = false
     private var dragging = false
@@ -21,14 +24,22 @@ final class TouchParticleRenderer: NSObject {
         super.init()
         surface.masksToBounds = true
         layer.addSublayer(surface)
-        halo.fillColor = ember.withAlphaComponent(0.18).cgColor
-        core.fillColor = emberLight.cgColor
+        applyColors()
         pulse.fillColor = UIColor.clear.cgColor
-        pulse.strokeColor = ember.withAlphaComponent(0.7).cgColor
         pulse.lineWidth = 1
         for shape in [halo, core, pulse] { shape.opacity = 0; surface.addSublayer(shape) }
-        setRadius(halo: 26)
-        core.path = UIBezierPath(ovalIn: CGRect(x: -5, y: -5, width: 10, height: 10)).cgPath
+        setRadius(halo: 14)
+        core.path = UIBezierPath(ovalIn: CGRect(x: -2.5, y: -2.5, width: 5, height: 5)).cgPath
+    }
+
+    /// 1 pt accent ring (Ø28) and a 5 pt accent dot, no glow.
+    private func applyColors() {
+        let color = accent.resolvedColor(with: UITraitCollection(userInterfaceStyle: style))
+        halo.fillColor = UIColor.clear.cgColor
+        halo.strokeColor = color.cgColor
+        halo.lineWidth = 1
+        core.fillColor = color.cgColor
+        pulse.strokeColor = color.withAlphaComponent(0.7).cgColor
     }
 
     deinit { pulseClear?.cancel() }
@@ -83,7 +94,7 @@ final class TouchParticleRenderer: NSObject {
         dragging = down
         contactPoint = point
         guard renderingActive else { return }
-        withoutAnimations { setRadius(halo: down ? 34 : 26) }
+        withoutAnimations { setRadius(halo: down ? 18 : 14) }
         if !down && !hasContact { withoutAnimations { halo.opacity = 0; core.opacity = 0 } }
     }
 
@@ -93,16 +104,23 @@ final class TouchParticleRenderer: NSObject {
         hasContact = false
         dragging = false
         withoutAnimations {
-            setRadius(halo: 26)
+            setRadius(halo: 14)
             halo.opacity = 0; core.opacity = 0; pulse.opacity = 0
         }
     }
 
     func setInteractionFrameRate(_ maximum: Int) {}
 
+    func setStyle(_ style: UIUserInterfaceStyle) {
+        guard self.style != style else { return }
+        self.style = style
+        withoutAnimations { applyColors() }
+    }
+
     private func show(at point: CGPoint) {
         contactPoint = point
         withoutAnimations {
+            applyColors()
             halo.position = point; core.position = point
             halo.opacity = 1; core.opacity = 1
         }

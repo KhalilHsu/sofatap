@@ -7,6 +7,7 @@ struct AirMouseView: View {
     @ObservedObject var model: ControllerModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+    @ObservedObject private var song = KareSong.shared
 
     var body: some View {
         ZStack {
@@ -37,37 +38,44 @@ struct AirMouseView: View {
     /// The page is the toggle and one stone. Display, recenter and
     /// sensitivity live in the device menu and settings.
     private var controls: some View {
-        VStack(spacing: 16) {
-            Spacer(minLength: 0)
-            pebble
-                .background(
-                    // Static rake rings centred on the stone; they overflow the
-                    // card on purpose and fade out before its edges.
-                    KareRipples()
-                        .frame(width: UIScreen.main.bounds.width * 1.4, height: UIScreen.main.bounds.height * 1.1)
-                )
-            if showHint {
-                Text(airMouseHint)
-                    .font(.system(size: 13)).tracking(1)
-                    .foregroundStyle(Kare.stone)
-                    .multilineTextAlignment(.center)
-                    .transition(.opacity)
+        // The stone sits on the ring centre of the static sand bitmap, which is
+        // laid out in screen coordinates; the label sits under it on one line.
+        GeometryReader { geo in
+            let frame = geo.frame(in: .global)
+            let screen = UIScreen.main.bounds.size
+            let center = KareSandBackground.stoneCenter(screen: screen)
+            let local = CGPoint(x: center.x - frame.minX, y: center.y - frame.minY)
+            let small = Kare.isSmallScreen
+            ZStack {
+                pebble.position(local)
+                stoneLabel.position(x: local.x, y: local.y + (small ? 202 : 238) + 10)
+                VStack(spacing: 6) {
+                    if showHint {
+                        Text(airMouseHint)
+                            .font(Kare.song(15)).tracking(1)
+                            .foregroundStyle(Kare.ink2)
+                            .multilineTextAlignment(.center)
+                            .transition(.opacity)
+                    }
+                    if model.connected && !model.receiverState.supportsDisplayCentering {
+                        Text(verbatim: ControllerModel.recenterUnsupportedNotice)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Kare.accent)
+                            .multilineTextAlignment(.center)
+                            .accessibilityIdentifier("airMouseRecenterNotice")
+                    }
+                }
+                .padding(.horizontal, 22)
+                .position(x: local.x, y: local.y - (small ? 132 : 162))
             }
-            if model.connected && !model.receiverState.supportsDisplayCentering {
-                Text(verbatim: ControllerModel.recenterUnsupportedNotice)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.orange)
-                    .multilineTextAlignment(.center)
-                    .accessibilityIdentifier("airMouseRecenterNotice")
-            }
-            Spacer(minLength: 0)
+            .allowsHitTesting(false)
         }
-        .padding(.horizontal, 22)
-        .padding(.top, 8)
-        .padding(.bottom, 24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             // The hint shows only on the first visit.
+#if targetEnvironment(simulator)
+            if ProcessInfo.processInfo.arguments.contains("--demo-hint-seen") { hintSeen = true }
+#endif
             if !hintSeen { hintSeen = true; Self.hintShownThisLaunch = true }
             showHint = Self.hintShownThisLaunch
         }
@@ -84,9 +92,33 @@ struct AirMouseView: View {
 
     private var airMouseHint: String { String(localized: "按住移动 · 轻点单击") }
 
+    /// 玄武岩 Basalt — Song in ink2, then the Latin name in italic mute.
+    private var stoneLabel: some View {
+        let names = Self.stoneNames(model.airMouseAppearance.stone.assetName)
+        return HStack(spacing: 6) {
+            Text(names.local).font(Kare.song(15)).foregroundStyle(Kare.ink2)
+            if names.local != names.latin {
+                Text(verbatim: names.latin).font(Kare.latinItalic(15)).foregroundStyle(Kare.mute)
+            }
+        }
+        .lineLimit(1)
+        .fixedSize()
+        .accessibilityIdentifier("airMouseStoneName")
+    }
+
+    static func stoneNames(_ asset: String) -> (local: String, latin: String) {
+        switch asset {
+        case "PebbleBasalt": return (String(localized: "玄武岩"), "Basalt")
+        case "PebbleGranite": return (String(localized: "花岗岩"), "Granite")
+        case "PebbleSlate": return (String(localized: "辉长岩"), "Gabbro")
+        case "PebbleSandstone": return (String(localized: "板岩"), "Slate")
+        default: return (String(localized: "绿岩"), "Greenstone")
+        }
+    }
+
     private var pebble: some View {
         let choice = model.airMouseAppearance
-        let longEdge: CGFloat = UIScreen.main.bounds.height <= 700 ? 240 : 300
+        let longEdge: CGFloat = Kare.isSmallScreen ? 240 : 300
         let lit = model.airMoving
         let motion = reduceMotion ? Animation.easeOut(duration: 0.1) : (lit ? .easeOut(duration: 0.14) : .easeOut(duration: 0.2))
         return TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { timeline in
@@ -136,8 +168,8 @@ struct AirMouseView: View {
                 }
                 .mask(Image(name).resizable().scaledToFit())
             }
-            .shadow(color: model.airMoving ? Color(red: 1, green: 140.0 / 255, blue: 40.0 / 255).opacity(0.45) : .clear,
-                    radius: model.airMoving ? 24 : 0)
+            .shadow(color: Kare.stoneShadow, radius: 12, y: 26)
+            .shadow(color: model.airMoving ? Kare.stoneLit : .clear, radius: model.airMoving ? 8 : 0)
     }
 
     /// Highlight center as a fraction of the stone. Pitch and roll are radians.

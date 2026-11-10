@@ -41,6 +41,8 @@ struct RemoteView: View {
     @State private var gestureSettingsSheet = false
     @State private var volumeSheet = false
     @State private var deviceSheet = false
+    /// Re-renders titles once the downloadable Songti SC is active.
+    @ObservedObject private var song = KareSong.shared
     @AppStorage(ControllerModel.airMouseSweepKey) private var sweepDegrees = AirMouseGain.defaultSweepDegrees
     @AppStorage(ControllerModel.airMouseShakeRecenterKey) private var shakeRecenter = true
     @AppStorage("sofatap.remoteSurface.v1") private var remoteSurface = "airMouse"
@@ -162,7 +164,7 @@ struct RemoteView: View {
             }
             .padding(.bottom, 4)
         }
-        .background(KareSandBackground(raked: !showsAirMouse && !tvNavigationSelected).ignoresSafeArea())
+        .background(KareSandBackground(rings: showsAirMouse).ignoresSafeArea())
     }
 
     private var presentation: some View {
@@ -402,10 +404,16 @@ struct RemoteView: View {
     }
 
     private var statusDotColor: Color {
-        if androidTVSelected { return androidTV.phase == .failed ? Kare.ember : androidTV.canControl ? Kare.lamp : Kare.dim }
-        if televisionSelected { return tv.phase == .failed ? Kare.ember : tv.phase == .ready ? Kare.lamp : Kare.dim }
-        if model.pairingError != nil || (model.connected && !model.inputAvailable) { return Kare.ember }
-        return model.canControl || model.demo ? Kare.lamp : Kare.dim
+        if androidTVSelected { return androidTV.phase == .failed ? Kare.accent : androidTV.canControl ? Kare.accent : Kare.mute }
+        if televisionSelected { return tv.phase == .failed ? Kare.accent : tv.phase == .ready ? Kare.accent : Kare.mute }
+        if model.pairingError != nil || (model.connected && !model.inputAvailable) { return Kare.accent }
+        return model.canControl || model.demo ? Kare.accent : Kare.mute
+    }
+
+    private var statusConnected: Bool {
+        if androidTVSelected { return androidTV.canControl }
+        if televisionSelected { return tv.phase == .ready }
+        return model.canControl || model.demo
     }
 
     /// Dot, serif device name and a thin chevron. Opens the device sheet.
@@ -416,16 +424,21 @@ struct RemoteView: View {
             deviceSheet = true
         } label: {
             HStack(spacing: 8) {
-                Circle().fill(statusDotColor).frame(width: 6, height: 6)
-                Text(currentDeviceName).font(Kare.serif(17)).tracking(1).lineLimit(1)
+                Group {
+                    if statusConnected { Circle().fill(statusDotColor) }
+                    else { Circle().strokeBorder(statusDotColor, lineWidth: 1) }
+                }
+                .frame(width: 6, height: 6)
+                Text(currentDeviceName).font(Kare.song(17)).tracking(1).lineLimit(1)
                     .foregroundStyle(Kare.ink)
-                KareGlyph(kind: .chevron).line(1.5).frame(width: 12, height: 12).foregroundStyle(Kare.stone)
+                KareIcon(name: "chev", size: 12).foregroundStyle(Kare.mute)
             }
             .padding(.horizontal, 12)
-            .frame(minHeight: 44)
+            .frame(minWidth: 220, minHeight: 44)
             .contentShape(Rectangle())
         }
         .buttonStyle(RemoteIconButtonStyle())
+        .onAppear { KareSong.shared.prepare() }
         .accessibilityLabel(String(localized: "配对设备与连接设置"))
         .accessibilityValue(currentDeviceName + ", " + connectionLabel)
         .accessibilityIdentifier("pairingButton")
@@ -458,30 +471,20 @@ struct RemoteView: View {
     private var deviceSheetContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 4) {
-                Text(String(localized: "设备")).font(Kare.serif(20)).tracking(1).foregroundStyle(Kare.ink)
+                Text(String(localized: "设备")).font(Kare.song(20)).tracking(1).foregroundStyle(Kare.ink)
                 Spacer(minLength: 0)
-                Button {
-                    deviceSheet = false
-                    gestureSettingsTarget = gestureTarget
-                    gestureSettingsSheet = true
-                } label: {
-                    KareGlyph(kind: .sliders).line(1.3).frame(width: 22, height: 22)
-                        .frame(width: 40, height: 40).contentShape(Rectangle())
-                }
-                .accessibilityLabel(String(localized: "手势设置"))
-                .accessibilityIdentifier("gestureSettingsButton")
                 Button {
                     deviceSheet = false
                     guideSheet = true
                 } label: {
-                    KareGlyph(kind: .help).line(1.3).frame(width: 22, height: 22)
+                    KareIcon(name: "help", size: 22)
                         .frame(width: 40, height: 40).contentShape(Rectangle())
                 }
                 .accessibilityLabel(String(localized: "使用指南"))
                 .accessibilityIdentifier("guideButton")
             }
             .buttonStyle(.plain)
-            .foregroundStyle(Kare.stone)
+            .foregroundStyle(Kare.mute)
             .padding(.bottom, 2)
             ForEach(model.savedDevices) { device in
                 let selected = model.desktopControlEnabled && model.selectedDeviceID == device.id
@@ -493,7 +496,7 @@ struct RemoteView: View {
                 } label: {
                     KareSheetRow(title: device.displayName,
                                  subtitle: selected ? connectionLabel : platformLabel(device.platform)) {
-                        if selected { KareGlyph(kind: .check).line().frame(width: 20, height: 20).foregroundStyle(Kare.ember) }
+                        if selected { KareIcon(name: "chk", size: 20).foregroundStyle(Kare.accent) }
                     }
                 }
                 .buttonStyle(.plain)
@@ -510,7 +513,7 @@ struct RemoteView: View {
                     KareSheetRow(title: device.displayName,
                                  subtitle: showsAirMouse ? String(localized: "仅支持触控板") : "Android TV",
                                  dimmed: showsAirMouse && !selected) {
-                        if selected { KareGlyph(kind: .check).line().frame(width: 20, height: 20).foregroundStyle(Kare.ember) }
+                        if selected { KareIcon(name: "chk", size: 20).foregroundStyle(Kare.accent) }
                     }
                 }
                 .buttonStyle(.plain)
@@ -526,7 +529,7 @@ struct RemoteView: View {
                     KareSheetRow(title: device.displayName,
                                  subtitle: showsAirMouse ? String(localized: "仅支持触控板") : "LG webOS",
                                  dimmed: showsAirMouse && !selected) {
-                        if selected { KareGlyph(kind: .check).line().frame(width: 20, height: 20).foregroundStyle(Kare.ember) }
+                        if selected { KareIcon(name: "chk", size: 20).foregroundStyle(Kare.accent) }
                     }
                 }
                 .buttonStyle(.plain)
@@ -536,12 +539,24 @@ struct RemoteView: View {
                 pairingSheet = true
             } label: {
                 KareSheetRow(title: String(localized: "添加或配对设备"), dimmed: false) {
-                    KareGlyph(kind: .plus).line(1.3).frame(width: 18, height: 18).foregroundStyle(Kare.stone)
+                    KareIcon(name: "plus", size: 18).foregroundStyle(Kare.mute)
                 }
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("addOrPairDevice")
             if showsAirMouse { airMouseSheetSection }
+            Button {
+                deviceSheet = false
+                gestureSettingsTarget = gestureTarget
+                gestureSettingsSheet = true
+            } label: {
+                KareSheetRow(title: String(localized: "设置"), icon: "set", separator: false) {
+                    Text(verbatim: "›").font(.system(size: 16)).foregroundStyle(Kare.mute)
+                }
+            }
+            .buttonStyle(.plain)
+            .padding(.top, showsAirMouse ? 8 : 0)
+            .accessibilityIdentifier("deviceSheetSettings")
         }
     }
 
@@ -552,7 +567,7 @@ struct RemoteView: View {
 
     private var airMouseSheetSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(String(localized: "空鼠")).font(.system(size: 11)).tracking(3).foregroundStyle(Kare.faint)
+            Text(String(localized: "空鼠")).font(.system(size: 11)).tracking(3).foregroundStyle(Kare.mute)
                 .padding(.top, 22).padding(.bottom, 4)
             Menu {
                 ForEach(model.receiverState.displays) { display in
@@ -567,8 +582,8 @@ struct RemoteView: View {
                     }
                 }
             } label: {
-                KareSheetRow(title: String(localized: "电视屏幕")) {
-                    Text(verbatim: selectedDisplayLabel + " ›").font(.system(size: 14)).foregroundStyle(Kare.dim)
+                KareSheetRow(title: String(localized: "电视屏幕"), icon: "screen") {
+                    Text(verbatim: selectedDisplayLabel + " ›").font(.system(size: 14)).foregroundStyle(Kare.mute)
                 }
             }
             .disabled(model.receiverState.displays.isEmpty)
@@ -577,9 +592,9 @@ struct RemoteView: View {
                 model.recenterAirMouse()
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
             } label: {
-                KareSheetRow(title: String(localized: "光标回中"), dimmed: !model.airMouseCanRecenter) {
+                KareSheetRow(title: String(localized: "光标回中"), icon: "center", dimmed: !model.airMouseCanRecenter) {
                     if shakeRecenter {
-                        Text(String(localized: "或摇一摇")).font(.system(size: 13)).foregroundStyle(Kare.dim)
+                        Text(String(localized: "或摇一摇")).font(.system(size: 13)).foregroundStyle(Kare.mute)
                     }
                 }
             }
@@ -600,7 +615,7 @@ struct RemoteView: View {
                 Spacer()
                 Text(String(localized: "快"))
             }
-            .font(.system(size: 12)).foregroundStyle(Kare.dim)
+            .font(.system(size: 12)).foregroundStyle(Kare.mute)
             .accessibilityHidden(true)
         }
     }
@@ -666,7 +681,7 @@ struct RemoteView: View {
         .overlay(alignment: .top) {
             header
                 .padding(.horizontal, 20)
-                .padding(.top, 4)
+                .padding(.top, Kare.isSmallScreen ? 6 : 0)
         }
         .overlay(alignment: .top) {
             VStack(spacing: 2) {
@@ -677,11 +692,11 @@ struct RemoteView: View {
                 if televisionSelected {
                     Text(String(localized: "连接 Mac 后可用"))
                         .font(.system(size: 11))
-                        .foregroundStyle(Kare.dim)
+                        .foregroundStyle(Kare.mute)
                         .accessibilityIdentifier("airMouseUnavailableNote")
                 }
             }
-            .padding(.top, 48)
+            .padding(.top, Kare.isSmallScreen ? 46 : 42)
         }
         .animation(.easeInOut(duration: 0.2), value: showsAirMouse)
         .onChangeCompat(of: showsAirMouse) { _, show in
@@ -692,13 +707,14 @@ struct RemoteView: View {
             // Text elsewhere continues to follow the selected language's direction.
             VStack(spacing: 0) {
                 // Hairline above the bar, inside the 16 pt dead gap.
-                LinearGradient(colors: [Kare.ink.opacity(0), Kare.ink.opacity(0.14), Kare.ink.opacity(0)],
+                LinearGradient(colors: [Kare.rule.opacity(0), Kare.rule, Kare.rule.opacity(0)],
                                startPoint: .leading, endPoint: .trailing)
-                    .frame(height: 1).padding(.horizontal, 40).padding(.bottom, 12)
+                    .frame(height: 1).padding(.horizontal, Kare.isSmallScreen ? 32 : 40)
+                    .padding(.bottom, Kare.isSmallScreen ? 2 : 6)
                     .allowsHitTesting(false)
                 bottomBar.environment(\.layoutDirection, .leftToRight)
-                    .frame(height: 72)
-                    .padding(.horizontal, 28).padding(.bottom, 4)
+                    .frame(height: Self.barCellHeight)
+                    .padding(.horizontal, Kare.isSmallScreen ? 7.5 : 15)
             }
                 .simultaneousGesture(DragGesture(minimumDistance: 0)
                     .onChanged { _ in
@@ -872,30 +888,33 @@ struct RemoteView: View {
 #endif
         UISelectionFeedbackGenerator().selectionChanged()
     }
-    /// Thin-line key for the bottom bar: 64 pt target, 24 pt glyph, no fill.
-    private func barGlyph(_ kind: KareGlyph.Kind, active: Bool) -> some View {
-        KareGlyph(kind: kind).line()
-            .frame(width: 24, height: 24)
-            .frame(width: 64, height: 64)
+    private static var barCellHeight: CGFloat { Kare.isSmallScreen ? 64 : 80 }
+    private static var micDiameter: CGFloat { Kare.isSmallScreen ? 56 : 64 }
+
+    /// One of three equal 120 pt bar cells with a delivered thin-line icon.
+    private func barGlyph(_ name: String, active: Bool) -> some View {
+        KareIcon(name: name, size: 24)
+            .frame(width: 120, height: Self.barCellHeight)
             .contentShape(Rectangle())
-            .foregroundStyle(active ? Kare.ember : Kare.inkSoft)
+            .foregroundStyle(active ? Kare.accent : Kare.ink2)
     }
 
-    /// Hollow ring with an ember glyph. Recording fills it faintly.
+    /// Hollow 1 pt accent ring (60 %) with the mic, no fill and no glow.
+    /// Recording fills it with accent and draws the icon in bg colour.
     private func micRing(recording: Bool, busy: Bool) -> some View {
         ZStack {
-            Circle().fill(recording ? Kare.ember.opacity(0.14) : Color.clear)
-            Circle().strokeBorder(Kare.ember.opacity(recording ? 1 : 0.6), lineWidth: 1)
+            Circle().fill(recording ? Kare.accent : Color.clear)
+            Circle().strokeBorder(Kare.accent.opacity(recording ? 1 : 0.6), lineWidth: 1)
             if busy {
-                ProgressView().tint(Kare.emberLight)
+                ProgressView().tint(Kare.accent)
             } else {
-                KareGlyph(kind: recording ? .stop : .mic).line()
-                    .frame(width: 24, height: 24)
-                    .foregroundStyle(Kare.emberLight)
+                KareIcon(name: recording ? "stop" : "mic", size: 24)
+                    .foregroundStyle(recording ? Kare.sand : Kare.accent)
             }
         }
-        .frame(width: 72, height: 72)
-        .contentShape(Circle())
+        .frame(width: Self.micDiameter, height: Self.micDiameter)
+        .frame(width: 120, height: Self.barCellHeight)
+        .contentShape(Rectangle())
     }
 
     private var televisionInputBar: some View {
@@ -906,7 +925,7 @@ struct RemoteView: View {
                 tvWantsDictation = false; composerVisible = true
                 withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { tvKeyboardFocused.toggle() }
                 UISelectionFeedbackGenerator().selectionChanged()
-            } label: { barGlyph(.keyboard, active: tvKeyboardFocused) }
+            } label: { barGlyph("kb", active: tvKeyboardFocused) }
             .buttonStyle(RemoteIconButtonStyle())
             .disabled(!androidTVSelected || !androidTV.connectionReady || androidTV.status?.tvControls == nil)
             .accessibilityValue(tvKeyboardFocused ? String(localized: "键盘已展开") : String(localized: "键盘已收起"))
@@ -924,12 +943,12 @@ struct RemoteView: View {
             .accessibilityLabel(tvWantsDictation ? String(localized: "取消语音输入") : String(localized: "开始语音输入"))
             .accessibilityIdentifier("tvDictationButton")
             Spacer(minLength: 0)
-            Color.clear.frame(width: 64, height: 64).allowsHitTesting(false)
+            Color.clear.frame(width: 120, height: Self.barCellHeight).allowsHitTesting(false)
         }
     }
     private var computerBottomBar: some View {
         HStack(spacing: 0) {
-            Button { toggleKeyboard() } label: { barGlyph(.keyboard, active: keyboardFocused) }
+            Button { toggleKeyboard() } label: { barGlyph("kb", active: keyboardFocused) }
             .buttonStyle(RemoteIconButtonStyle())
             .accessibilityValue(keyboardFocused ? String(localized: "键盘已展开") : String(localized: "键盘已收起"))
             .accessibilityLabel(keyboardFocused ? String(localized: "收起键盘") : String(localized: "打开键盘输入"))
@@ -946,7 +965,7 @@ struct RemoteView: View {
             .accessibilityValue(dictation.isRecording ? String(localized: "麦克风正在录音") : dictation.state == .finishing ? String(localized: "正在整理听写结果") : "")
             .accessibilityIdentifier("dictationButton")
             Spacer(minLength: 0)
-            Button { volumeSheet = true } label: { barGlyph(.volume, active: false) }
+            Button { volumeSheet = true } label: { barGlyph("vol", active: false) }
             .buttonStyle(RemoteIconButtonStyle())
             .disabled(!interfaceAvailable)
             .accessibilityLabel(String(localized: "电脑系统音量"))
@@ -1229,9 +1248,9 @@ struct RemoteView: View {
     }
     @State private var bottomBarTouched = false
     /// Device name (44 pt) and the surface tabs below it.
-    private static let headerHeight: CGFloat = 96
+    private static var headerHeight: CGFloat { Kare.isSmallScreen ? 90 : 88 }
     /// Bottom bar (72 pt), its 4 pt inset and the hairline above it.
-    private static let barReserve: CGFloat = 76
+    private static var barReserve: CGFloat { barCellHeight + (Kare.isSmallScreen ? 2 : 6) }
     private var showsAirMouse: Bool { !televisionSelected && remoteSurface == "airMouse" }
 
     private func resumeCurrentInput() {
@@ -1280,8 +1299,7 @@ private struct MicrophoneButtonStyle: ButtonStyle {
             .brightness(pressed ? -0.12 : 0)
             .animation(reduceMotion ? nil : .easeOut(duration: pressed ? 0.10 : 0.16), value: pressed)
             // Keep the full target while its visible surface compresses.
-            .frame(width: 72, height: 72)
-            .contentShape(Circle())
+            .contentShape(Rectangle())
             .onChangeCompat(of: pressed) { _, down in
                 if down { prepareFeedback() }
             }

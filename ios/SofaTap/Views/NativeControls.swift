@@ -326,6 +326,7 @@ struct TouchSurface: UIViewRepresentable {
         }
         override func layoutSubviews() {
             super.layoutSubviews()
+            effects.setStyle(traitCollection.userInterfaceStyle)
             effects.layout(in: bounds)
 #if targetEnvironment(simulator)
             if window != nil, active { effects.startPreviewIfRequested() }
