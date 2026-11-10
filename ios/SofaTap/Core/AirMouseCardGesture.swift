@@ -228,3 +228,46 @@ struct AirMouseCardGesture {
         return [.pointer(dx, dy)]
     }
 }
+
+enum AirMouseStone: String, CaseIterable, Equatable {
+    case basalt, granite, slate, sandstone, greenstone
+    var assetName: String {
+        switch self {
+        case .basalt: return "PebbleBasalt"
+        case .granite: return "PebbleGranite"
+        case .slate: return "PebbleSlate"
+        case .sandstone: return "PebbleSandstone"
+        case .greenstone: return "PebbleGreenstone"
+        }
+    }
+}
+
+struct AirMouseStoneChoice: Equatable {
+    var stone: AirMouseStone
+    var rotationDegrees: Double
+    var mirrored: Bool
+    /// Visual scale around 1. Kept inside the card.
+    var scale: Double
+}
+
+enum AirMouseStones {
+    /// `unit` is in 0..<1. The previous stone is removed from the pool so a new
+    /// session or connection cannot repeat it. A nil previous may return any stone.
+    static func choose(previous: AirMouseStone?, unit: Double) -> AirMouseStone {
+        let pool = AirMouseStone.allCases.filter { $0 != previous }
+        let options = pool.isEmpty ? AirMouseStone.allCases : pool
+        let clamped = unit.isFinite ? min(0.999999, max(0, unit)) : 0
+        let index = min(options.count - 1, Int(clamped * Double(options.count)))
+        return options[index]
+    }
+
+    /// `units` are four independent 0..<1 draws: stone, rotation, mirror, scale.
+    static func appearance(previous: AirMouseStone?, units: (Double, Double, Double, Double)) -> AirMouseStoneChoice {
+        let rotation = (units.1.isFinite ? min(0.999999, max(0, units.1)) : 0) * 360
+        let scale = 0.92 + (units.3.isFinite ? min(1, max(0, units.3)) : 0) * 0.16
+        return AirMouseStoneChoice(stone: choose(previous: previous, unit: units.0),
+                                   rotationDegrees: rotation,
+                                   mirrored: units.2 >= 0.5,
+                                   scale: scale)
+    }
+}

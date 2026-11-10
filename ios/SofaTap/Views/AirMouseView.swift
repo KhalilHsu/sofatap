@@ -1,9 +1,8 @@
 import SwiftUI
 import UIKit
 
-/// Temporary gyro entry. The pebble is a stand-in for the later visual design:
-/// a dark stone at rest, amber while the finger is down, with a highlight that
-/// follows pitch and roll. Reduce Motion keeps the highlight in one place.
+/// Air-mouse card. The pebble is a catalog photo (`PebbleBasalt` and the other
+/// four stones), lit amber while held, with a tilt highlight and a 2.4 s breath.
 struct AirMouseView: View {
     @ObservedObject var model: ControllerModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -130,43 +129,42 @@ struct AirMouseView: View {
 
     private var pebble: some View {
         let highlight = AirMouseHighlight.offset(pitch: model.airMousePitch, roll: model.airMouseRoll, reduceMotion: reduceMotion)
-        return ZStack {
-            PebbleShape()
-                .fill(model.airMoving ? AnyShapeStyle(activeFill) : AnyShapeStyle(idleFill))
+        let choice = model.airMouseAppearance
+        return TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { timeline in
+            let breath = reduceMotion ? 1.0 : 1 + 0.035 * sin(timeline.date.timeIntervalSinceReferenceDate / 2.4 * 2 * Double.pi)
+            stoneImage
+                .scaleEffect(x: (choice.mirrored ? -1 : 1) * choice.scale * breath, y: choice.scale * breath)
+                .rotationEffect(.degrees(choice.rotationDegrees))
                 .overlay {
-                    PebbleShape().stroke(model.airMoving ? Color.orange.opacity(0.85) : Color.white.opacity(0.14), lineWidth: model.airMoving ? 3 : 1)
+                    Ellipse()
+                        .fill(RadialGradient(colors: [Color.white.opacity(model.airMoving ? 0.9 : 0.28), .clear],
+                                             center: .center, startRadius: 0, endRadius: 22))
+                        .frame(width: 52, height: 32)
+                        .offset(x: highlight.x * 28, y: highlight.y * 22)
+                        .blendMode(.plusLighter)
+                        .allowsHitTesting(false)
                 }
-                .shadow(color: model.airMoving ? Color.orange.opacity(0.55) : .black.opacity(0.45), radius: model.airMoving ? 28 : 16, y: 10)
-            if !model.airMoving {
-                PebbleVeins()
-                    .stroke(Color.white.opacity(0.22), style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
-                    .padding(34)
-                    .allowsHitTesting(false)
-            }
-            Ellipse()
-                .fill(RadialGradient(colors: [Color.white.opacity(model.airMoving ? 0.95 : 0.35), .clear],
-                                     center: .center, startRadius: 0, endRadius: 28))
-                .frame(width: 64, height: 40)
-                .offset(x: highlight.x * 34, y: highlight.y * 26)
-                .blendMode(.plusLighter)
-                .allowsHitTesting(false)
+                .frame(width: 168, height: 132)
         }
-        .frame(width: 210, height: 168)
         .allowsHitTesting(false)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(String(localized: "按住石子移动光标，松手立刻停止。轻点单击。"))
-        .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("airMousePebble")
     }
 
-    private var idleFill: LinearGradient {
-        LinearGradient(colors: [Color(white: 0.46), Color(white: 0.24), Color(white: 0.16)],
-                       startPoint: .topLeading, endPoint: .bottomTrailing)
-    }
-
-    private var activeFill: RadialGradient {
-        RadialGradient(colors: [Color(red: 1, green: 0.78, blue: 0.32), Color(red: 0.93, green: 0.45, blue: 0.05), Color(red: 0.55, green: 0.18, blue: 0.02)],
-                       center: .center, startRadius: 8, endRadius: 120)
+    private var stoneImage: some View {
+        let name = model.airMouseAppearance.stone.assetName
+        return Image(name)
+            .resizable()
+            .scaledToFit()
+            .overlay {
+                if model.airMoving {
+                    Image(name).resizable().scaledToFit()
+                        .colorMultiply(Color(red: 1, green: 0.55, blue: 0.12))
+                        .opacity(0.85)
+                        .allowsHitTesting(false)
+                }
+            }
+            .shadow(color: model.airMoving ? Color.orange.opacity(0.55) : .black.opacity(0.35),
+                    radius: model.airMoving ? 18 : 10, y: 8)
     }
 
     @ViewBuilder private var displayPicker: some View {
@@ -195,28 +193,6 @@ struct AirMouseView: View {
         let size = "\(display.width)×\(display.height) · \(scale)"
         guard display.isMain else { return size }
         return size + " · " + String(localized: "主屏幕")
-    }
-}
-
-private struct PebbleShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        let w = rect.width, h = rect.height
-        var path = Path()
-        path.move(to: CGPoint(x: w * 0.50, y: h * 0.06))
-        path.addCurve(to: CGPoint(x: w * 0.90, y: h * 0.34),
-                      control1: CGPoint(x: w * 0.70, y: h * 0.02), control2: CGPoint(x: w * 0.92, y: h * 0.14))
-        path.addCurve(to: CGPoint(x: w * 0.84, y: h * 0.78),
-                      control1: CGPoint(x: w * 0.98, y: h * 0.52), control2: CGPoint(x: w * 0.96, y: h * 0.68))
-        path.addCurve(to: CGPoint(x: w * 0.46, y: h * 0.96),
-                      control1: CGPoint(x: w * 0.74, y: h * 0.94), control2: CGPoint(x: w * 0.60, y: h * 0.99))
-        path.addCurve(to: CGPoint(x: w * 0.10, y: h * 0.62),
-                      control1: CGPoint(x: w * 0.26, y: h * 0.94), control2: CGPoint(x: w * 0.08, y: h * 0.80))
-        path.addCurve(to: CGPoint(x: w * 0.22, y: h * 0.20),
-                      control1: CGPoint(x: w * 0.04, y: h * 0.44), control2: CGPoint(x: w * 0.08, y: h * 0.28))
-        path.addCurve(to: CGPoint(x: w * 0.50, y: h * 0.06),
-                      control1: CGPoint(x: w * 0.30, y: h * 0.08), control2: CGPoint(x: w * 0.38, y: h * 0.04))
-        path.closeSubpath()
-        return path
     }
 }
 
@@ -250,19 +226,6 @@ struct RemoteSurfaceToggle: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
-    }
-}
-
-private struct PebbleVeins: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.midY))
-        path.addQuadCurve(to: CGPoint(x: rect.maxX * 0.92, y: rect.minY + 8),
-                          control: CGPoint(x: rect.midX, y: rect.midY - 10))
-        path.move(to: CGPoint(x: rect.minX + 6, y: rect.maxY * 0.72))
-        path.addQuadCurve(to: CGPoint(x: rect.maxX * 0.8, y: rect.maxY * 0.55),
-                          control: CGPoint(x: rect.midX, y: rect.maxY * 0.9))
-        return path
     }
 }
 

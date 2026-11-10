@@ -93,6 +93,18 @@ struct AirMouseCardGestureTests {
         let dropped = fingers.extraFinger()
         check("a second finger releases a drag and does not click", dropped == [.drag(false)])
 
+        let again = AirMouseStones.choose(previous: .basalt, unit: 0)
+        check("a new stone does not repeat the previous one", again != .basalt)
+        let allDifferent = AirMouseStone.allCases.allSatisfy { previous in
+            (0..<20).allSatisfy { step in
+                AirMouseStones.choose(previous: previous, unit: Double(step) / 20) != previous
+            }
+        }
+        check("every previous stone is excluded across the unit interval", allDifferent)
+        let look = AirMouseStones.appearance(previous: .slate, units: (0, 0.25, 0.8, 0.5))
+        check("appearance draws rotation, mirror and scale without repeating",
+              look.stone != .slate && abs(look.rotationDegrees - 90) < 0.001 && look.mirrored && abs(look.scale - 1.0) < 0.001)
+
         print("PASS \(passed) air-mouse card gesture checks (no device input)")
     }
 }

@@ -64,6 +64,7 @@ final class ControllerModel: ObservableObject {
     @Published private(set) var airMouseSweepDegrees = AirMouseGain.defaultSweepDegrees
     @Published private(set) var airMousePitch = 0.0
     @Published private(set) var airMouseRoll = 0.0
+    @Published private(set) var airMouseAppearance = AirMouseStoneChoice(stone: .basalt, rotationDegrees: 0, mirrored: false, scale: 1)
     @Published private(set) var selectedRemoteDisplayID: String?
     /// Shown when a connected receiver did not advertise display centering.
     static let recenterUnsupportedNotice = "当前接收端不支持自动回中"
@@ -176,6 +177,7 @@ final class ControllerModel: ObservableObject {
     private let motion = CMMotionManager()
     private var airTracker = AirMouseTracker()
     private var cardGesture = AirMouseCardGesture()
+    private let lastAirMouseStoneKey = "sofatap.airMouse.lastStone"
     private var airSession = false
     private var airGeneration = UUID()
     private var latestAirSample: AirMouseSample?
@@ -920,6 +922,7 @@ final class ControllerModel: ObservableObject {
             // Windows Hello PIN support requires a separate verified protocol.
             notice = state.inputAvailable ? String(localized: "已连接。先点选电脑上的输入框，即可发送文字。") : state.unavailableMessage
             noteDisplays()
+            if airSession { pickAirMouseStone() }
             startTimers()
             return true
         case "ack":
@@ -1473,6 +1476,7 @@ final class ControllerModel: ObservableObject {
         airTracker = AirMouseTracker()
         cardGesture = AirMouseCardGesture()
         syncAirMouseMapping()
+        pickAirMouseStone()
         noteDisplays()
         beginAirMotionUpdates()
     }
@@ -1608,6 +1612,15 @@ final class ControllerModel: ObservableObject {
 
     private func syncAirMouseMapping() {
         airTracker.setMapping(sweepDegrees: airMouseSweepDegrees, logicalWidth: airMouseLogicalWidth, logicalHeight: airMouseLogicalHeight)
+    }
+
+    private func pickAirMouseStone() {
+        let previous = UserDefaults.standard.string(forKey: lastAirMouseStoneKey).flatMap(AirMouseStone.init(rawValue:))
+        var generator = SystemRandomNumberGenerator()
+        func unit() -> Double { Double.random(in: 0..<1, using: &generator) }
+        let choice = AirMouseStones.appearance(previous: previous, units: (unit(), unit(), unit(), unit()))
+        airMouseAppearance = choice
+        UserDefaults.standard.set(choice.stone.rawValue, forKey: lastAirMouseStoneKey)
     }
 
     private func tickAirMouseCard() {
