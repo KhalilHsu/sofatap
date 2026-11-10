@@ -20,9 +20,11 @@ struct SofaTapApp: App {
 }
 
 enum Palette {
-    static let background = Color(red: 0.039, green: 0.051, blue: 0.067)
-    static let panel = Color(red: 0.079, green: 0.098, blue: 0.122)
-    static let elevated = Color(red: 0.110, green: 0.137, blue: 0.165)
-    static let mint = Color(red: 0.722, green: 0.953, blue: 0.816)
-    static let muted = Color(red: 0.60, green: 0.65, blue: 0.69)
+    // 枯山水: dark warm sand. `mint` keeps its name but is now the single
+    // ember accent, so older screens follow the new palette.
+    static let background = Color(red: 0.078, green: 0.071, blue: 0.063)
+    static let panel = Color(red: 0.118, green: 0.106, blue: 0.090)
+    static let elevated = Color(red: 0.161, green: 0.145, blue: 0.122)
+    static let mint = Color(red: 0.831, green: 0.529, blue: 0.290)
+    static let muted = Color(red: 0.549, green: 0.518, blue: 0.463)
 }

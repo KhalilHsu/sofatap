@@ -526,3 +526,10 @@
 "灵敏度与手势" = "Sensibilité et gestes";
 "摇一摇回中" = "Secouer pour recentrer";
 "手指离开屏幕时摇一下手机，光标回到屏幕中间" = "Sans toucher l’écran, secouez le téléphone pour ramener le pointeur au centre";
+/* 枯山水 device sheet and surface tabs. */
+"设备" = "Appareils";
+"触控" = "Trackpad";
+"空鼠" = "Souris aérienne";
+"或摇一摇" = "ou secouez";
+"添加或配对设备" = "Ajouter ou jumeler un appareil";
+"仅支持触控板" = "Trackpad uniquement";

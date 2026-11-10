@@ -530,3 +530,10 @@
 "灵敏度与手势" = "Sensitivity and gestures";
 "摇一摇回中" = "Shake to recenter";
 "手指离开屏幕时摇一下手机，光标回到屏幕中间" = "With your finger off the screen, shake the phone to bring the pointer back to the center";
+/* 枯山水 device sheet and surface tabs. */
+"设备" = "Devices";
+"触控" = "Trackpad";
+"空鼠" = "Air mouse";
+"或摇一摇" = "or shake";
+"添加或配对设备" = "Add or pair a device";
+"仅支持触控板" = "Trackpad only";

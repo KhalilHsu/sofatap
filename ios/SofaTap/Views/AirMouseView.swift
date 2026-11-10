@@ -40,10 +40,16 @@ struct AirMouseView: View {
         VStack(spacing: 16) {
             Spacer(minLength: 0)
             pebble
+                .background(
+                    // Static rake rings centred on the stone; they overflow the
+                    // card on purpose and fade out before its edges.
+                    KareRipples()
+                        .frame(width: UIScreen.main.bounds.width * 1.4, height: UIScreen.main.bounds.height * 1.1)
+                )
             if showHint {
                 Text(airMouseHint)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Palette.muted)
+                    .font(.system(size: 13)).tracking(1)
+                    .foregroundStyle(Kare.stone)
                     .multilineTextAlignment(.center)
                     .transition(.opacity)
             }
@@ -57,8 +63,8 @@ struct AirMouseView: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 22)
-        .padding(.top, 24)
-        .padding(.bottom, 8)
+        .padding(.top, 8)
+        .padding(.bottom, 24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             // The hint shows only on the first visit.
@@ -149,51 +155,20 @@ struct AirMouseView: View {
     }
 }
 
-/// Dark two-segment control for the remote card. Stock UISegmentedControl
-/// stays light and does not sit cleanly beside the television note.
+/// Text-only 触控 / 空鼠 tabs under the device name.
 struct RemoteSurfaceToggle: View {
     @Binding var airMouse: Bool
     var enabled: Bool
-    @Namespace private var selection
 
     var body: some View {
-        HStack(spacing: 0) {
-            segment(String(localized: "触控板"), symbol: "hand.point.up.left", selected: !airMouse) { select(false) }
-            segment(String(localized: "陀螺空鼠"), symbol: "gyroscope", selected: airMouse) { select(true) }
+        KareTabs(titles: [String(localized: "触控"), String(localized: "空鼠")], selected: airMouse ? 1 : 0, enabled: enabled) { index in
+            let air = index == 1
+            guard air != airMouse else { return }
+            airMouse = air
+            UISelectionFeedbackGenerator().selectionChanged()
         }
-        .padding(3)
-        .frame(width: 248, height: 36)
-        .background(Palette.elevated, in: Capsule())
-        .overlay(Capsule().stroke(Palette.mint.opacity(0.10), lineWidth: 1))
-        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: airMouse)
-        .opacity(enabled ? 1 : 0.45)
-        .disabled(!enabled)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("remoteSurfaceToggle")
-    }
-
-    private func select(_ air: Bool) {
-        guard air != airMouse else { return }
-        airMouse = air
-        UISelectionFeedbackGenerator().selectionChanged()
-    }
-
-    private func segment(_ title: String, symbol: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                Image(systemName: symbol).font(.system(size: 13, weight: .medium))
-                Text(title).font(.system(size: 14, weight: selected ? .semibold : .medium))
-            }
-            .frame(width: 121, height: 30)
-            .foregroundStyle(selected ? Palette.background : Palette.muted)
-            .background {
-                if selected {
-                    Capsule().fill(Palette.mint).matchedGeometryEffect(id: "remoteSurface", in: selection)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 

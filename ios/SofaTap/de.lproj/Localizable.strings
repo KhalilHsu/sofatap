@@ -526,3 +526,10 @@
 "灵敏度与手势" = "Empfindlichkeit und Gesten";
 "摇一摇回中" = "Schütteln zum Zentrieren";
 "手指离开屏幕时摇一下手机，光标回到屏幕中间" = "Ohne Finger auf dem Display das Telefon schütteln, um den Zeiger in die Mitte zu bringen";
+/* 枯山水 device sheet and surface tabs. */
+"设备" = "Geräte";
+"触控" = "Trackpad";
+"空鼠" = "Air-Mouse";
+"或摇一摇" = "oder schütteln";
+"添加或配对设备" = "Gerät hinzufügen oder koppeln";
+"仅支持触控板" = "Nur Trackpad";

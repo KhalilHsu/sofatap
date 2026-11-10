@@ -526,3 +526,10 @@
 "灵敏度与手势" = "Sensitivitas dan gestur";
 "摇一摇回中" = "Goyang untuk memusatkan";
 "手指离开屏幕时摇一下手机，光标回到屏幕中间" = "Tanpa menyentuh layar, goyangkan ponsel untuk mengembalikan penunjuk ke tengah";
+/* 枯山水 device sheet and surface tabs. */
+"设备" = "Perangkat";
+"触控" = "Trackpad";
+"空鼠" = "Mouse udara";
+"或摇一摇" = "atau goyangkan";
+"添加或配对设备" = "Tambah atau pasangkan perangkat";
+"仅支持触控板" = "Hanya trackpad";

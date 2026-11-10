@@ -307,7 +307,10 @@ final class ControllerModel: ObservableObject {
 #if targetEnvironment(simulator)
             if ProcessInfo.processInfo.arguments.contains("--demo-devices") {
                 var library = DeviceLibrary<Pairing>()
-                for (index, title, platform) in [(1, "Living room PC", "windows"), (2, "Studio Mac", "macos"), (3, "Cinema Linux", "linux")] {
+                let fixtures = ProcessInfo.processInfo.arguments.contains("--demo-devices-zh")
+                    ? [(1, "客厅 Mac mini", "macos"), (2, "书房 MacBook Air", "macos")]
+                    : [(1, "Living room PC", "windows"), (2, "Studio Mac", "macos"), (3, "Cinema Linux", "linux")]
+                for (index, title, platform) in fixtures {
                     let credential = Pairing(host: "192.0.2.\(index)", port: 53317,
                                              token: String(repeating: "d", count: 43), fingerprint: String(repeating: String(index), count: 64))
                     library.upsert(credential)

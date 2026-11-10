@@ -80,30 +80,10 @@ struct GestureSettingsView: View {
 
     @AppStorage("sofatap.airMouse.flickRightClick") private var flickRightClick = false
     @AppStorage("sofatap.airMouse.rightHold") private var rightHold = 0.6
-    @AppStorage(ControllerModel.airMouseSweepKey) private var sweepDegrees = AirMouseGain.defaultSweepDegrees
     @AppStorage(ControllerModel.airMouseShakeRecenterKey) private var shakeRecenter = true
 
     private var airMouseSection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(String(localized: "灵敏度"))
-                Slider(value: Binding(
-                    get: { AirMouseGain.sensitivitySliderPosition(sweepDegrees: sweepDegrees) },
-                    set: { sweepDegrees = AirMouseGain.sweepDegrees(sensitivitySliderPosition: $0) }
-                ), in: AirMouseGain.minimumSweepDegrees...AirMouseGain.maximumSweepDegrees, step: 1)
-                .tint(Palette.mint)
-                .accessibilityLabel(String(localized: "灵敏度"))
-                .accessibilityHint(String(localized: "手腕转一点，光标走多远"))
-                HStack {
-                    Text(String(localized: "慢"))
-                    Spacer()
-                    Text(String(localized: "快"))
-                }
-                .font(.caption)
-                .foregroundStyle(Palette.muted)
-                .accessibilityHidden(true)
-            }
-            .padding(.vertical, 4)
             Toggle(isOn: $shakeRecenter) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(String(localized: "摇一摇回中"))

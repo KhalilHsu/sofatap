@@ -11,6 +11,7 @@
 		B2E11B22C3D4E5F60718293A /* AirMouseMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F00A11B2C3D4E5F6071829 /* AirMouseMotion.swift */; };
 		B7C0DE22C3D4E5F607182902 /* AirMouseCardGesture.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C0DE11B2C3D4E5F6071801 /* AirMouseCardGesture.swift */; };
 		D4C33D44E5F60718293A4B5C /* AirMouseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D22C33D4E5F60718293A4B /* AirMouseView.swift */; };
+		A1B2C3D4E5F6A7B8C9D0E1F2 /* KareStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F6A7B8C9D0E1F2A3 /* KareStyle.swift */; };
 		0880E9F8731F50DEA8E7378E /* AndroidTVPairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6DC33E8052762AFA900FC59 /* AndroidTVPairingView.swift */; };
 		0BE3084A48A20D1B2A26FF38 /* PeerTransportDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B025E89091221B07940DE33 /* PeerTransportDiscovery.swift */; };
 		A15C0E0115C0E0115C0E0115 /* IOS15Compat.swift in Sources */ = {isa = PBXBuildFile; fileRef = A15C0E0215C0E0215C0E0216 /* IOS15Compat.swift */; };
@@ -67,6 +68,7 @@
 		A1F00A11B2C3D4E5F6071829 /* AirMouseMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirMouseMotion.swift; sourceTree = "<group>"; };
 		A7C0DE11B2C3D4E5F6071801 /* AirMouseCardGesture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirMouseCardGesture.swift; sourceTree = "<group>"; };
 		C3D22C33D4E5F60718293A4B /* AirMouseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirMouseView.swift; sourceTree = "<group>"; };
+		B2C3D4E5F6A7B8C9D0E1F2A3 /* KareStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KareStyle.swift; sourceTree = "<group>"; };
 		073F44E198299E317E1E4D3D /* NativeControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeControls.swift; sourceTree = "<group>"; };
 		0CD153A949AB5AE1D0EF3CC3 /* GestureConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GestureConfiguration.swift; sourceTree = "<group>"; };
 		A15C0E0215C0E0215C0E0216 /* IOS15Compat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOS15Compat.swift; sourceTree = "<group>"; };
@@ -216,6 +218,7 @@
 			isa = PBXGroup;
 			children = (
 				C3D22C33D4E5F60718293A4B /* AirMouseView.swift */,
+				B2C3D4E5F6A7B8C9D0E1F2A3 /* KareStyle.swift */,
 				B7278E8AE3984D11185A862A /* AddDeviceView.swift */,
 				2579134CBB91C5AF446BB081 /* AndroidTVComposer.swift */,
 				27466787F2CA3B385E583839 /* AndroidTVNavigationView.swift */,
@@ -331,6 +334,7 @@
 				B7C0DE22C3D4E5F607182902 /* AirMouseCardGesture.swift in Sources */,
 				B2E11B22C3D4E5F60718293A /* AirMouseMotion.swift in Sources */,
 				D4C33D44E5F60718293A4B5C /* AirMouseView.swift in Sources */,
+				A1B2C3D4E5F6A7B8C9D0E1F2 /* KareStyle.swift in Sources */,
 				A56D49F018B31B26158F30AA /* AddDeviceView.swift in Sources */,
 				B5CFBF6C0FCDCB2F7375011E /* AndroidTVComposer.swift in Sources */,
 				14781C4CA2D4BF8AA1B01BFC /* AndroidTVController.swift in Sources */,

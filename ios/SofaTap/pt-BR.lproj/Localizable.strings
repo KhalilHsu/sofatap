@@ -526,3 +526,10 @@
 "灵敏度与手势" = "Sensibilidade e gestos";
 "摇一摇回中" = "Agitar para centralizar";
 "手指离开屏幕时摇一下手机，光标回到屏幕中间" = "Sem tocar na tela, agite o telefone para levar o ponteiro ao centro";
+/* 枯山水 device sheet and surface tabs. */
+"设备" = "Dispositivos";
+"触控" = "Trackpad";
+"空鼠" = "Mouse aéreo";
+"或摇一摇" = "ou agite";
+"添加或配对设备" = "Adicionar ou parear dispositivo";
+"仅支持触控板" = "Somente trackpad";

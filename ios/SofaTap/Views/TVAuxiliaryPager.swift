@@ -35,12 +35,12 @@ struct TVAuxiliaryPager: UIViewRepresentable {
         private let symbols = [UIImageView(), UIImageView()]
         private let selection = [UIView(), UIView()]
         private var dots: [UIView] = []
-        private let mint = UIColor(red: 0.722, green: 0.953, blue: 0.816, alpha: 1)
+        private let mint = UIColor(red: 0.831, green: 0.529, blue: 0.290, alpha: 1)
         private var actions: [Action] { guard let config, config.pages.indices.contains(page) else { return [] }; return config.pages[page] }
         override init(frame: CGRect) {
             super.init(frame: frame)
             isMultipleTouchEnabled = true; clipsToBounds = true
-            backgroundColor = UIColor(red: 0.035, green: 0.05, blue: 0.06, alpha: 0.9)
+            backgroundColor = UIColor(red: 0.118, green: 0.106, blue: 0.090, alpha: 0.92)
             layer.cornerRadius = 22; layer.borderColor = mint.withAlphaComponent(0.16).cgColor; layer.borderWidth = 1
             accessibilityIdentifier = "tvAuxiliaryPager"
             for index in symbols.indices {

@@ -40,7 +40,7 @@ struct EdgeScrollStrip: UIViewRepresentable {
         private var fingerY: CGFloat?
         private var accessibilityFeedback = false
         private var feedbackReset: DispatchWorkItem?
-        private let mint = UIColor(red: 0.655, green: 0.929, blue: 0.796, alpha: 1)
+        private let mint = UIColor(red: 0.914, green: 0.886, blue: 0.831, alpha: 1)
 
         override init(frame: CGRect) {
             super.init(frame: frame)

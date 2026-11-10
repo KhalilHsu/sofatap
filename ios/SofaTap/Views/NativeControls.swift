@@ -40,7 +40,7 @@ struct NativeDraftEditor: UIViewRepresentable {
         view.delegate = context.coordinator
         view.backgroundColor = .clear
         view.textColor = UIColor(white: 0.94, alpha: 1)
-        view.tintColor = UIColor(red: 0.722, green: 0.953, blue: 0.816, alpha: 1)
+        view.tintColor = UIColor(red: 0.831, green: 0.529, blue: 0.290, alpha: 1)
         view.font = .systemFont(ofSize: 19, weight: .regular)
         view.textContainerInset = UIEdgeInsets(top: 12, left: 9, bottom: 12, right: 9)
         view.keyboardDismissMode = .interactive

@@ -25,7 +25,7 @@ struct AndroidTVNavigationPad: UIViewRepresentable {
         private let hints = UIView()
         private let centerDot = UIView()
         private var arrows: [AndroidTVKey: UIImageView] = [:]
-        private let mint = UIColor(red: 0.722, green: 0.953, blue: 0.816, alpha: 1)
+        private let mint = UIColor(red: 0.831, green: 0.529, blue: 0.290, alpha: 1)
         private var lastBounds = CGRect.zero
         override init(frame: CGRect) {
             super.init(frame: frame)
