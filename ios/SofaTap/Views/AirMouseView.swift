@@ -29,7 +29,7 @@ struct AirMouseView: View {
     }
 
     private var controls: some View {
-        VStack(spacing: 22) {
+        VStack(spacing: UIScreen.main.bounds.height <= 700 ? 14 : 22) {
             VStack(spacing: 14) {
                 pebble
                 HStack(spacing: 8) {
@@ -77,9 +77,9 @@ struct AirMouseView: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 22)
+        .padding(.top, 24)
         .padding(.bottom, 18)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Palette.background)
         .onAppear { if scenePhase == .active { model.startAirMouseSession() } }
         .onDisappear { model.stopAirMouse() }
         .onChangeCompat(of: scenePhase) { _, phase in
@@ -151,7 +151,8 @@ struct AirMouseView: View {
                 .rotationEffect(.degrees(choice.rotationDegrees))
                 .animation(motion, value: lit)
         }
-        .frame(width: longEdge, height: longEdge * 329 / 460)
+        // Tall enough for a rotated, breathing stone so nothing above covers it.
+        .frame(width: longEdge, height: longEdge * 0.86)
         .contentShape(Rectangle())
         .allowsHitTesting(false)
         .accessibilityIdentifier("airMousePebble")
@@ -175,12 +176,14 @@ struct AirMouseView: View {
                 }
             }
             .overlay {
+                // Soft radial highlight: 0.55 at the center, gone by 40% of the
+                // radius, masked by the stone's alpha so it sits in the texture.
                 GeometryReader { geo in
-                    Ellipse()
+                    let radius = max(geo.size.width, geo.size.height) / 2
+                    Rectangle()
                         .fill(RadialGradient(colors: [Color.white.opacity(0.55), Color.white.opacity(0)],
-                                             center: .center, startRadius: 0, endRadius: min(geo.size.width, geo.size.height) * 0.4))
-                        .frame(width: geo.size.width * 0.72, height: geo.size.height * 0.55)
-                        .position(x: geo.size.width * highlight.x, y: geo.size.height * highlight.y)
+                                             center: UnitPoint(x: highlight.x, y: highlight.y),
+                                             startRadius: 0, endRadius: radius * 0.4))
                         .allowsHitTesting(false)
                 }
                 .mask(Image(name).resizable().scaledToFit())
