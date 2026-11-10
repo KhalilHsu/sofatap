@@ -319,6 +319,10 @@ final class ControllerModel: ObservableObject {
                 savedDevices = library.devices
                 selectedDeviceID = library.devices.first?.id
                 computerName = library.devices.first?.displayName ?? computerName
+                // The demo has no receiver, so supply one main display; the
+                // sheet's TV screen and recenter rows then show their real state.
+                receiverState.displays = [RemoteDisplay(id: "demo-main", width: 3840, height: 2160, scale: 2, isMain: true)]
+                selectedRemoteDisplayID = "demo-main"
             }
 #endif
         }
@@ -1644,6 +1648,14 @@ final class ControllerModel: ObservableObject {
     }
 
     private func pickAirMouseStone() {
+#if targetEnvironment(simulator)
+        let arguments = ProcessInfo.processInfo.arguments
+        if demo, let index = arguments.firstIndex(of: "--demo-stone"), index + 1 < arguments.count,
+           let stone = AirMouseStone(rawValue: arguments[index + 1]) {
+            airMouseAppearance = AirMouseStoneChoice(stone: stone, rotationDegrees: 0, mirrored: false, scale: 1)
+            return
+        }
+#endif
         let previous = UserDefaults.standard.string(forKey: lastAirMouseStoneKey).flatMap(AirMouseStone.init(rawValue:))
         var generator = SystemRandomNumberGenerator()
         func unit() -> Double { Double.random(in: 0..<1, using: &generator) }

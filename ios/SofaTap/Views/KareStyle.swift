@@ -37,9 +37,17 @@ enum Kare {
         if let name = KareSong.shared.fontName { return .custom(name, fixedSize: size) }
         return .custom("PingFangSC-Medium", fixedSize: size)
     }
-    /// Latin italic for English stone names (system New York italic).
+    static let instrumentSerifItalic = "InstrumentSerif-Italic"
+    /// Bundled Instrument Serif Italic (OFL) for English stone names; New York
+    /// italic if the font failed to register.
+    static let instrumentSerifLoaded: Bool = {
+        let ok = UIFont(name: instrumentSerifItalic, size: 15) != nil
+        NSLog("KareFont InstrumentSerif-Italic loaded=%@", ok ? "YES" : "NO")
+        return ok
+    }()
     static func latinItalic(_ size: CGFloat) -> Font {
-        .system(size: size, weight: .regular, design: .serif).italic()
+        if instrumentSerifLoaded { return .custom(instrumentSerifItalic, fixedSize: size) }
+        return .system(size: size, weight: .regular, design: .serif).italic()
     }
 }
 
@@ -124,8 +132,8 @@ struct KareTabs: View {
             ForEach(titles.indices, id: \.self) { index in
                 Button { onSelect(index) } label: {
                     VStack(spacing: 6) {
-                        Text(titles[index]).font(.custom("PingFangSC-Medium", fixedSize: 13)).tracking(3)
-                            .foregroundStyle(index == selected ? Kare.ink : Kare.mute)
+                        Text(titles[index]).font(.custom("PingFangSC-Medium", fixedSize: 14)).tracking(3)
+                            .foregroundStyle(index == selected ? Kare.ink : Kare.ink2)
                         Rectangle().fill(index == selected ? Kare.accent : .clear).frame(height: 1)
                     }
                     .fixedSize()

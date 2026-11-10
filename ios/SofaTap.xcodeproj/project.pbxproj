@@ -25,6 +25,7 @@
 		2CA8D98DD58E0E28DC36DD7A /* TouchGestureState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 895EB1B944638483C701ADDC /* TouchGestureState.swift */; };
 		320D03B356374CB42AB659EB /* GestureConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CD153A949AB5AE1D0EF3CC3 /* GestureConfiguration.swift */; };
 		390FF8AC98B4923D8FE0BD44 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 951A32A70DFF898858DD7CDD /* Assets.xcassets */; };
+		C1D2E3F4A5B6C7D8E9F0A1B2 /* InstrumentSerif-Italic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = D2E3F4A5B6C7D8E9F0A1B2C3 /* InstrumentSerif-Italic.ttf */; };
 		3D5EF8B303AB20CF62A7EAE4 /* UnlockProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4A7AE9B52EF945FBF4ADE53 /* UnlockProtocol.swift */; };
 		57D1C6677714CCDE21AC5467 /* AndroidTVProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = D18FB04130086BA45CCC4601 /* AndroidTVProtocol.swift */; };
 		5B741448790C9BB1956C5E80 /* DeviceGuideContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53495476F4E1A21926CBCAD3 /* DeviceGuideContext.swift */; };
@@ -117,6 +118,7 @@
 		8BBE37D2E9367D549188005C /* hi */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = hi; path = hi.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		8E456A2636B418FE1F7D1358 /* SavedDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedDevice.swift; sourceTree = "<group>"; };
 		951A32A70DFF898858DD7CDD /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		D2E3F4A5B6C7D8E9F0A1B2C3 /* InstrumentSerif-Italic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fonts/InstrumentSerif-Italic.ttf"; sourceTree = "<group>"; };
 		95606E97C5C6FFEA489A4B4B /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = de; path = de.lproj/Localizable.strings; sourceTree = "<group>"; };
 		9606A77DF1CE0D82EB3F153F /* TVAuxiliaryPager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVAuxiliaryPager.swift; sourceTree = "<group>"; };
 		9BA691589E2CFD49ECBD6683 /* PeerTLSBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerTLSBridge.swift; sourceTree = "<group>"; };
@@ -179,6 +181,7 @@
 			isa = PBXGroup;
 			children = (
 				951A32A70DFF898858DD7CDD /* Assets.xcassets */,
+				D2E3F4A5B6C7D8E9F0A1B2C3 /* InstrumentSerif-Italic.ttf */,
 				F559181B1DC8444C237039F4 /* Info.plist */,
 				3717B15001E2480956B638CE /* PrivacyInfo.xcprivacy */,
 				B2194963D13F182243533BEB /* SofaTapApp.swift */,
@@ -318,6 +321,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				390FF8AC98B4923D8FE0BD44 /* Assets.xcassets in Resources */,
+				C1D2E3F4A5B6C7D8E9F0A1B2 /* InstrumentSerif-Italic.ttf in Resources */,
 				D9564E7710C99F8C4C4A87C8 /* InfoPlist.strings in Resources */,
 				9434097D51E493B438C2FCE6 /* Localizable.strings in Resources */,
 				62E055F9B738880A3F6FB68A /* PrivacyInfo.xcprivacy in Resources */,

@@ -8,6 +8,7 @@ struct AirMouseView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var song = KareSong.shared
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ZStack {
@@ -96,9 +97,9 @@ struct AirMouseView: View {
     private var stoneLabel: some View {
         let names = Self.stoneNames(model.airMouseAppearance.stone.assetName)
         return HStack(spacing: 6) {
-            Text(names.local).font(Kare.song(15)).foregroundStyle(Kare.ink2)
+            Text(names.local).font(Kare.song(17)).foregroundStyle(Kare.ink)
             if names.local != names.latin {
-                Text(verbatim: names.latin).font(Kare.latinItalic(15)).foregroundStyle(Kare.mute)
+                Text(verbatim: names.latin).font(Kare.latinItalic(17)).foregroundStyle(Kare.ink2)
             }
         }
         .lineLimit(1)
@@ -124,7 +125,8 @@ struct AirMouseView: View {
         return TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { timeline in
             let wave = reduceMotion ? 0.0 : 0.5 + 0.5 * sin(timeline.date.timeIntervalSinceReferenceDate / 2.4 * 2 * Double.pi)
             let breathScale = reduceMotion ? 1.0 : 0.98 + 0.05 * wave
-            let breathOpacity = reduceMotion ? 1.0 : 0.55 + 0.45 * wave
+            // Breathing stays subtle so a dark stone never fades into the sand.
+            let breathOpacity = reduceMotion ? 1.0 : 0.9 + 0.1 * wave
             stoneImage(longEdge: longEdge)
                 .opacity(breathOpacity)
                 .scaleEffect(x: (choice.mirrored ? -1 : 1) * choice.scale * breathScale, y: choice.scale * breathScale)
@@ -150,8 +152,8 @@ struct AirMouseView: View {
                     Image(name)
                         .resizable()
                         .scaledToFit()
-                        .colorMultiply(Color(red: 1, green: 159.0 / 255, blue: 67.0 / 255))
-                        .opacity(0.35)
+                        .colorMultiply(Kare.accent)
+                        .opacity(0.22)
                         .allowsHitTesting(false)
                 }
             }
@@ -160,14 +162,21 @@ struct AirMouseView: View {
                 // radius, masked by the stone's alpha so it sits in the texture.
                 GeometryReader { geo in
                     let radius = max(geo.size.width, geo.size.height) / 2
+                    // A small, faint sheen at the upper left, nudged by tilt;
+                    // the stone's own texture carries the look.
                     Rectangle()
-                        .fill(RadialGradient(colors: [Color.white.opacity(0.55), Color.white.opacity(0)],
+                        .fill(RadialGradient(colors: [Color.white.opacity(0.18), Color.white.opacity(0)],
                                              center: UnitPoint(x: highlight.x, y: highlight.y),
-                                             startRadius: 0, endRadius: radius * 0.4))
+                                             startRadius: 0, endRadius: radius * 0.22))
                         .allowsHitTesting(false)
                 }
                 .mask(Image(name).resizable().scaledToFit())
             }
+            // Dark sand: lift the stone and add a faint rim so even Gabbro
+            // stands clearly above the sand in peripheral vision.
+            .brightness(colorScheme == .dark ? 0.10 : 0)
+            .contrast(colorScheme == .dark ? 1.08 : 1)
+            .shadow(color: colorScheme == .dark ? Kare.ink.opacity(0.16) : .clear, radius: 10)
             .shadow(color: Kare.stoneShadow, radius: 12, y: 26)
             .shadow(color: model.airMoving ? Kare.stoneLit : .clear, radius: model.airMoving ? 8 : 0)
     }
@@ -176,7 +185,7 @@ struct AirMouseView: View {
     private var tiltHighlight: (x: Double, y: Double) {
         let pitch = min(30, max(-30, model.airMousePitch * 180 / .pi))
         let roll = min(30, max(-30, model.airMouseRoll * 180 / .pi))
-        return (0.5 + roll * 0.007, 0.5 - pitch * 0.007)
+        return (0.32 + roll * 0.004, 0.28 - pitch * 0.004)
     }
 
     static func displayLabel(_ display: RemoteDisplay) -> String {
