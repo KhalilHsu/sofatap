@@ -132,7 +132,7 @@ struct KareTabs: View {
             ForEach(titles.indices, id: \.self) { index in
                 Button { onSelect(index) } label: {
                     VStack(spacing: 6) {
-                        Text(titles[index]).font(.custom("PingFangSC-Medium", fixedSize: 14)).tracking(3)
+                        Text(titles[index]).font(.custom("PingFangSC-Medium", fixedSize: 15)).tracking(3)
                             .foregroundStyle(index == selected ? Kare.ink : Kare.ink2)
                         Rectangle().fill(index == selected ? Kare.accent : .clear).frame(height: 1)
                     }
