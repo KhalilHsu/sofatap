@@ -519,7 +519,6 @@ struct RemoteView: View {
                     get: { remoteSurface == "airMouse" },
                     set: { remoteSurface = $0 ? "airMouse" : "trackpad" }
                 ), enabled: !televisionSelected)
-                .padding(.horizontal, 12)
                 if televisionSelected {
                     Text(String(localized: "连接 Mac 后可用"))
                         .font(.caption2)

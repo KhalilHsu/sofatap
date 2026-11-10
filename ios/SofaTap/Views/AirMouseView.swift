@@ -30,26 +30,24 @@ struct AirMouseView: View {
 
     private var controls: some View {
         VStack(spacing: 22) {
-            Text(String(localized: "陀螺空鼠"))
-                .font(.system(size: 22, weight: .semibold))
-                .padding(.top, 8)
-            HStack(alignment: .center, spacing: 22) {
+            VStack(spacing: 14) {
                 pebble
                 Button(action: model.recenterAirMouse) {
-                    VStack(spacing: 6) {
+                    HStack(spacing: 6) {
                         Image(systemName: "scope")
-                            .font(.system(size: 22, weight: .semibold))
                         Text(String(localized: "回中"))
-                            .font(.system(size: 13, weight: .semibold))
                     }
-                    .frame(width: 76, height: 76)
+                    .font(.system(size: 15, weight: .semibold))
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
                     .foregroundStyle(model.airMouseCanRecenter ? Palette.background : Palette.muted)
-                    .background(model.airMouseCanRecenter ? Palette.mint : Palette.elevated, in: Circle())
+                    .background(model.airMouseCanRecenter ? Palette.mint : Palette.elevated, in: Capsule())
                 }
                 .buttonStyle(.plain)
                 .disabled(!model.airMouseCanRecenter)
                 .accessibilityIdentifier("airMouseRecenter")
             }
+            .frame(maxWidth: .infinity)
             Text(String(localized: "按住石子移动光标，松手立刻停止。轻点单击。"))
                 .font(.footnote)
                 .foregroundStyle(Palette.muted)
@@ -83,23 +81,6 @@ struct AirMouseView: View {
                 Text(String(localized: "手腕转一点，光标走多远"))
                     .font(.caption)
                     .foregroundStyle(Palette.muted)
-            }
-            .padding(16)
-            .background(Palette.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text(String(localized: "右键按住时长")).font(.caption.weight(.semibold))
-                    Spacer()
-                    Text(verbatim: String(format: "%.1f s", rightHold))
-                        .font(.caption.monospacedDigit()).foregroundStyle(Palette.mint)
-                }
-                Slider(value: $rightHold, in: 0.5...0.8, step: 0.1)
-                    .tint(Palette.mint)
-                    .accessibilityLabel(String(localized: "右键按住时长"))
-                Toggle(isOn: $flickRightClick) {
-                    Text(String(localized: "横划右键")).font(.caption.weight(.semibold))
-                }
-                .tint(Palette.mint)
             }
             .padding(16)
             .background(Palette.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -137,7 +118,8 @@ struct AirMouseView: View {
                         .blendMode(.plusLighter)
                         .allowsHitTesting(false)
                 }
-                .frame(width: 168, height: 132)
+                .frame(maxWidth: 240)
+                .frame(maxWidth: .infinity)
         }
         .allowsHitTesting(false)
         .accessibilityIdentifier("airMousePebble")
@@ -197,7 +179,8 @@ struct RemoteSurfaceToggle: View {
             segment(String(localized: "触控板"), selected: !airMouse) { airMouse = false }
             segment(String(localized: "陀螺空鼠"), selected: airMouse) { airMouse = true }
         }
-        .padding(4)
+        .padding(.horizontal, 3)
+        .frame(width: 248, height: 36)
         .background(Palette.elevated, in: Capsule())
         .opacity(enabled ? 1 : 0.45)
         .disabled(!enabled)

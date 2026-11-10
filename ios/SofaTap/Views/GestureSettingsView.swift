@@ -27,6 +27,7 @@ struct GestureSettingsView: View {
         NavigationStack {
             Form {
                 presetSection
+                if target == .computer { airMouseSection }
                 mappingSection
                 timingSection
                 Section {
@@ -75,6 +76,32 @@ struct GestureSettingsView: View {
             }
         }
 #endif
+    }
+
+    @AppStorage("sofatap.airMouse.flickRightClick") private var flickRightClick = false
+    @AppStorage("sofatap.airMouse.rightHold") private var rightHold = 0.6
+
+    private var airMouseSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(String(localized: "右键按住时长"))
+                    Spacer()
+                    Text(verbatim: String(format: "%.1f s", rightHold))
+                        .foregroundStyle(Palette.mint)
+                        .monospacedDigit()
+                }
+                Slider(value: $rightHold, in: 0.5...0.8, step: 0.1)
+                    .tint(Palette.mint)
+                    .accessibilityLabel(String(localized: "右键按住时长"))
+                Toggle(isOn: $flickRightClick) {
+                    Text(String(localized: "横划右键"))
+                }
+                .tint(Palette.mint)
+            }
+            .padding(.vertical, 4)
+        }
+        .listRowBackground(Palette.panel)
     }
 
     private var presetSection: some View {
