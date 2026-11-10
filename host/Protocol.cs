@@ -6,7 +6,7 @@ namespace SofaTap;
 public sealed record ActionMessage(string Id, string Type, double Dx = 0, double Dy = 0,
     string? Button = null, bool Down = false, string? Key = null, string[]? Modifiers = null, string? Text = null,
     string? Session = null, int Revision = 0, int SelectionStart = 0, int SelectionLength = 0, string? Command = null,
-    string? Display = null);
+    string? Display = null, bool RequireFocus = false);
 public sealed record ActionAck(string Type, string Id, bool Ok, string? Error = null, LiveTextSnapshot? LiveText = null)
 {
     public static ActionAck Success(string id) => new("ack", id, true);
@@ -40,7 +40,8 @@ public static class Protocol
             "button" => ["id", "type", "button", "down"],
             "key" => ["id", "type", "key", "modifiers"],
             "volume" => ["id", "type", "command"],
-            "text" => ["id", "type", "text"],
+            // requireFocus is sent only to receivers that advertise textNoFocus.
+            "text" => fields.ContainsKey("requireFocus") ? ["id", "type", "text", "requireFocus"] : ["id", "type", "text"],
             "textBegin" => ["id", "type"],
             "textEnd" => ["id", "type", "session"],
             "textSync" => ["id", "type", "session", "revision", "text", "selectionStart", "selectionLength"],
@@ -97,7 +98,7 @@ public static class Protocol
                     else if (char.IsLowSurrogate(text[index])) throw new ProtocolException("Unpaired UTF-16 surrogate.");
                     else if (text[index] == '\0') throw new ProtocolException("NUL text is unsupported.");
                 }
-                return new(id, type, Text: text);
+                return new(id, type, Text: text, RequireFocus: fields.ContainsKey("requireFocus") && Boolean(fields, "requireFocus"));
             default: return new(id, type);
         }
     }
@@ -150,7 +151,7 @@ public static class Protocol
 }
 
 public sealed class ActionSession(IInputInjector input, int maximumActions = 131_072, LiveTextSession? liveText = null,
-    ISystemVolume? systemVolume = null)
+    ISystemVolume? systemVolume = null, Func<TextFocusKind>? textFocus = null)
 {
     private readonly Dictionary<Guid, (ActionAck Ack, byte[] Digest)> _seen = [];
     private int _cachedTextUnits;
@@ -190,6 +191,10 @@ public sealed class ActionSession(IInputInjector input, int maximumActions = 131
             {
                 // A desktop action can change the caret/target. Pointer motion alone
                 // does not invalidate typing; clicks, keys and drag initiation do.
+                // A phone that opted in learns that nothing is focused instead of
+                // typing into nothing. Unknown focus still types, as before.
+                if (action.Type == "text" && action.RequireFocus && textFocus?.Invoke() == TextFocusKind.Other)
+                    throw new InputInjectionException("input_no_focus: No editable field is focused on the computer.");
                 if (action.Type is "click" or "key" or "text" || action.Type == "button" && action.Down) liveText?.End();
                 if (action.Type != "ping") input.Apply(action);
                 ack = ActionAck.Success(action.Id);

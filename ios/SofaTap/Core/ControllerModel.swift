@@ -10,7 +10,10 @@ enum DesktopConnectionMode: String {
 }
 
 enum TextDelivery: Equatable {
-    case ready, sending, sent, rejected(String), uncertain
+    /// `rejected`: definitely not typed (not connected, never left the phone, or an
+    /// explicit refusal before any event). `noFocus`: the computer had no editable
+    /// field, nothing was typed. `uncertain`: it may have been typed.
+    case ready, sending, sent, rejected(String), noFocus, uncertain
 }
 
 private enum CommandResult {
@@ -193,6 +196,9 @@ final class ControllerModel: ObservableObject {
         let type: String
         let timer: Task<Void, Never>
         let completion: ((CommandResult) -> Void)?
+        /// URLSession reported the frame as written. Until then a timeout means
+        /// the frame never left this phone.
+        var outbound = false
     }
     private var pending: [String: Pending] = [:]
 #if SOFATAP_CONTROLLER_TESTING
@@ -206,6 +212,8 @@ final class ControllerModel: ObservableObject {
     private var testScheduleReconnect: ((TimeInterval, @escaping () -> Void) -> Void)?
     private var testPeerAvailabilityMonitor: ((@escaping (Bool) -> Void) -> Void)?
     private var testWireSend: ((String) -> Void)?
+    /// Recording wire only: hold frames as if still queued on this phone.
+    var testWireHoldsFrames = false
     init(testPairingLibrary: DeviceLibrary<Pairing>,
          testPairingWrite: @escaping (Pairing) throws -> DeviceLibrary<Pairing>,
          testPairingConnect: @escaping (Pairing) -> Void,
@@ -529,9 +537,10 @@ final class ControllerModel: ObservableObject {
             if lastSentDraft != nil { return String(localized: "确认后只发送新增的文字。") }
             return liveTextStatus == .unsupported ? liveTextDescription : String(localized: "先点电脑里的输入框，再发送整段文字。")
         case .sending: return String(localized: "等待电脑确认… 请勿重复发送。")
-        case .sent: return String(localized: "已向电脑系统提交文字；请在屏幕上确认内容。")
-        case .rejected(let error): return String(localized: "未被电脑接受：\(error)")
-        case .uncertain: return String(localized: "发送结果不完整或未确认，文字可能已输入。请先查看电脑屏幕，避免重复。")
+        case .sent: return ""
+        case .rejected: return String(localized: "没有送到电脑")
+        case .noFocus: return String(localized: "电脑上没有可输入的位置，请先点一下输入框")
+        case .uncertain: return String(localized: "连接断了一下，不确定电脑收到没有")
         }
     }
 
@@ -958,15 +967,20 @@ final class ControllerModel: ObservableObject {
                 // stays bounded and never includes server-controlled suffixes or drafts.
                 let rawCode = (message["error"] as? String)?.split(separator: ":", maxSplits: 1).first.map(String.init)
                 let code = rawCode.flatMap { value -> String? in
-                    let allowed = ["input_busy", "input_unavailable", "invalid_frame", "input_failed", "unsupported_key", "too_large", "invalid_message", "rate_limited", "live_text_unsupported", "live_text_conflict", "live_text_changed", "live_text_uncertain", "live_text_invalid"]
+                    let allowed = ["input_busy", "input_no_focus", "input_unavailable", "invalid_frame", "input_failed", "unsupported_key", "too_large", "invalid_message", "rate_limited", "live_text_unsupported", "live_text_conflict", "live_text_changed", "live_text_uncertain", "live_text_invalid"]
                     return allowed.contains(value) ? value : nil
                 } ?? "unknown_error"
                 // A failed injection can have typed a prefix. Unknown errors are conservative.
                 let definitelyRejected = ["input_unavailable", "invalid_frame", "input_failed", "unsupported_key", "too_large", "invalid_message", "rate_limited", "live_text_unsupported", "live_text_conflict", "live_text_changed", "live_text_uncertain", "live_text_invalid"].contains(rawCode ?? "")
                 if item.type == "volume" && ["volume_unknown", "input_unknown", "input_partial"].contains(rawCode ?? "") {
                     item.completion?(.uncertain)
+                } else if item.type == "text" && rawCode == "input_no_focus" {
+                    item.completion?(.rejected("input_no_focus"))
+                } else if item.type == "text" && rawCode == "input_busy" {
+                    // input_busy is raised before any event is attempted.
+                    item.completion?(.rejected("input_busy"))
                 } else if item.type == "text" && !definitelyRejected {
-                    notice = String(localized: "电脑未完整确认操作，文字可能已经部分输入。请先查看电脑屏幕。")
+                    // The inline delivery hint explains this; no second banner.
                     item.completion?(.uncertain)
                 } else {
                     let displayCode = code == "unknown_error" ? String(localized: "操作未完成") : code
@@ -1048,12 +1062,22 @@ final class ControllerModel: ObservableObject {
             self?.commandTimedOut(id: id, generation: currentGeneration)
         }
         pending[id] = Pending(type: type, timer: timer, completion: completion)
-        if let recordingWire { recordingWire(text); return }
+        if let recordingWire {
+#if SOFATAP_CONTROLLER_TESTING
+            if testWireHoldsFrames { return }
+#endif
+            pending[id]?.outbound = true; recordingWire(text); return
+        }
         guard let socket else { return }
         socket.send(.string(text)) { [weak self] error in
-            guard let error else { return }
             Task { @MainActor in
                 guard let self, self.generation == currentGeneration else { return }
+                guard let error else { self.pending[id]?.outbound = true; return }
+                // The frame was not written, so it cannot have been typed.
+                if self.pending[id]?.type == "text", let item = self.pending.removeValue(forKey: id) {
+                    item.timer.cancel()
+                    item.completion?(.rejected("send_failed"))
+                }
                 let retryable = Self.mayRetryTransport(error, diagnostic: self.sessionDelegate?.rejectionReason,
                                                       status: (socket.response as? HTTPURLResponse)?.statusCode,
                                                       closeCode: socket.closeCode, authenticated: self.connected)
@@ -1065,6 +1089,10 @@ final class ControllerModel: ObservableObject {
 
     private func commandTimedOut(id: String, generation currentGeneration: UUID) {
         guard generation == currentGeneration, pending[id] != nil else { return }
+        if pending[id]?.type == "text", pending[id]?.outbound == false, let item = pending.removeValue(forKey: id) {
+            // Still queued on this phone: definitely not typed.
+            item.completion?(.rejected("send_timeout"))
+        }
         // Keep the timed-out item in pending. Disconnect first invalidates the
         // generation and removes all pending items, then completes each once as
         // uncertain. A drag completion cannot recursively disconnect and cancel
@@ -1304,17 +1332,56 @@ final class ControllerModel: ObservableObject {
         let attempt = UUID()
         explicitSendAttempt = attempt
         textDelivery = .sending
-        send("text", fields: ["text": payload]) { [weak self] result in
+        var fields: [String: Any] = ["text": payload]
+        if receiverState.supportsNoFocusCheck { fields["requireFocus"] = true }
+        send("text", fields: fields) { [weak self] result in
             guard let self, self.explicitSendAttempt == attempt else { return }
             self.explicitSendAttempt = nil
             switch result {
             case .accepted:
                 self.lastSentDraft = snapshot
                 self.textDelivery = self.explicitTextToSend == "" ? .sent : .ready
+                self.deliveryFeedback()
+            case .rejected("input_no_focus"): self.textDelivery = .noFocus
             case .rejected(let error): self.textDelivery = .rejected(error)
             case .uncertain: self.textDelivery = .uncertain
             }
         }
+    }
+
+    /// 「重试」/「再发一次」: send exactly the same unsent text again. Used after a
+    /// definite failure, a missing focus, or when the user chooses to resend an
+    /// uncertain delivery after checking the computer.
+    func retryTextDelivery() {
+        guard !sendingText, !usesLiveText else { return }
+        switch textDelivery {
+        case .rejected, .noFocus, .uncertain: textDelivery = .ready
+        default: break
+        }
+        sendText()
+    }
+
+    /// The app's own dictation ended. Its partial results stayed on the phone;
+    /// publish the final draft exactly once (live sync) or unlock Send.
+    func finishDictation() {
+        if liveTextReady {
+            editText(draft, selection: draftSelection, marked: false)
+        } else {
+            composing = false
+        }
+    }
+
+    /// 「已上屏」: the user saw the text on the computer. Clear the draft and unlock.
+    func confirmTextDelivered() {
+        guard textDelivery == .uncertain, !sendingText else { return }
+        clearDraft()
+    }
+
+    private func deliveryFeedback() {
+#if SOFATAP_CONTROLLER_TESTING
+        if testSend != nil || testLiveSend != nil || testPairingConnect != nil || testWireSend != nil { return }
+#endif
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
     func allowManualResend() {
@@ -1766,7 +1833,7 @@ final class ControllerModel: ObservableObject {
             defaults.set("sent", forKey: "textDeliveryMarker")
         case .uncertain:
             defaults.set("uncertain", forKey: "textDeliveryMarker")
-        case .ready, .rejected:
+        case .ready, .rejected, .noFocus:
             if let prefix = lastSentDraft {
                 defaults.set(digest(prefix), forKey: "sentDraftDigest")
                 defaults.set(prefix.utf16.count, forKey: "sentDraftUTF16Length")

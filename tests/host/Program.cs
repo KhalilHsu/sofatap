@@ -141,6 +141,24 @@ var failed = committed with { Id = Guid.NewGuid().ToString("D") };
 var rejected = session.Execute(failed);
 Check(!rejected.Ok && rejected.Error!.StartsWith("input_partial:") && fake.Count == 2, "partial injection status propagated");
 Check(!session.Execute(failed).Ok && fake.Count == 2, "failed partial action never retried");
+// input_no_focus: opt-in per frame, unknown focus still types, legacy frames unchanged.
+var focusKind = TextFocusKind.Other;
+var focusInput = new FakeInput();
+var focused = new ActionSession(focusInput, textFocus: () => focusKind);
+var optIn = Protocol.Parse(System.Text.Encoding.UTF8.GetBytes("{\"id\":\"" + Guid.NewGuid().ToString("D") + "\",\"type\":\"text\",\"text\":\"hi\",\"requireFocus\":true}"));
+Check(optIn.RequireFocus && optIn.Text == "hi", "requireFocus parses on text frames");
+var noFocus = focused.Execute(optIn);
+Check(!noFocus.Ok && noFocus.Error!.StartsWith("input_no_focus:", StringComparison.Ordinal) && focusInput.Count == 0, "no editable focus answers input_no_focus without typing");
+Check(focused.Execute(committed with { Id = Guid.NewGuid().ToString("D") }).Ok && focusInput.Count == 1, "a legacy text frame without requireFocus still types");
+focusKind = TextFocusKind.Unknown;
+Check(focused.Execute(optIn with { Id = Guid.NewGuid().ToString("D") }).Ok && focusInput.Count == 2, "unknown focus still types");
+focusKind = TextFocusKind.Editable;
+Check(focused.Execute(optIn with { Id = Guid.NewGuid().ToString("D") }).Ok && focusInput.Count == 3, "editable focus types");
+Check(new ActionSession(new FakeInput()).Execute(optIn with { Id = Guid.NewGuid().ToString("D") }).Ok, "a receiver without a focus probe ignores requireFocus");
+Reject(Message("\"type\":\"text\",\"text\":\"x\",\"requireFocus\":1"), "non-boolean requireFocus");
+var helloCaps = System.Text.Json.JsonSerializer.Serialize(ReceiverServer.CreateHello("m", "macos", false, "ready", new TextFocusMetadata("unknown", 0), noFocusCheck: true));
+Check(!ReceiverDistribution.SupportsTextInspection || helloCaps.Contains("\"textNoFocus\":{\"version\":1}"), "hello advertises textNoFocus");
+
 var bounded = new ActionSession(new FakeInput(), 1);
 Check(bounded.Execute(committed).Ok, "dedup bounded session first action");
 try { bounded.Execute(committed with { Id = Guid.NewGuid().ToString("D") }); throw new Exception("FAIL: action cap accepted"); }

@@ -547,3 +547,10 @@
 /* Air mouse two-finger scroll hint and guide card. */
 "两指上下滑 · 滚动" = "Two fingers up or down · Scroll";
 "按住石子挥动手机，光标大幅移动；按住时单指在石子上滑动，光标精细移动。双指上下滑动滚动页面。轻点单击，轻点两下双击，按住不动右键，轻点后按住拖动。" = "Hold the stone and wave the phone for large pointer moves; while holding, slide one finger on the stone for fine moves. Swipe two fingers up or down to scroll. Tap to click, tap twice to double-click, hold still to right-click, tap then hold to drag.";
+/* Explicit text delivery hints. */
+"没有送到电脑" = "Didn't reach the computer";
+"电脑上没有可输入的位置，请先点一下输入框" = "Nothing to type into on the computer. Click a text field first";
+"连接断了一下，不确定电脑收到没有" = "The connection dropped. Not sure the computer got it";
+"重试" = "Retry";
+"已上屏" = "It's there";
+"再发一次" = "Send again";

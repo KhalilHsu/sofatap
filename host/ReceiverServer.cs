@@ -72,13 +72,15 @@ public sealed class ReceiverServer(ReceiverOptions options, Credentials credenti
     // legacy enrollment file remains on disk. PIN control needs a separate, verified protocol.
     internal static object CreateHello(string name, string platform, bool dryRun,
         string status, TextFocusMetadata focus, bool liveTextSupported = false, bool systemVolumeSupported = false,
-        object? display = null) => new
+        object? display = null, bool noFocusCheck = false) => new
     {
         type = "hello", version = 1, name, platform, dryRun,
         inputAvailable = status == "ready", inputStatus = status,
         textFocus = ReceiverDistribution.SupportsTextInspection ? focus : new TextFocusMetadata("unknown", 0),
         liveText = ReceiverDistribution.SupportsTextInspection && liveTextSupported && !dryRun ? new { version = 1 } : null,
         systemVolume = systemVolumeSupported && !dryRun && status == "ready" ? new { version = 1 } : null,
+        // Opt-in: text frames with requireFocus get input_no_focus instead of typing.
+        textNoFocus = ReceiverDistribution.SupportsTextInspection && noFocusCheck && !dryRun ? new { version = 1 } : null,
         // Null is omitted. Older clients ignore this object when a Mac receiver includes it.
         display
     };
@@ -115,9 +117,11 @@ public sealed class ReceiverServer(ReceiverOptions options, Credentials credenti
             ? new LiveTextSession(textEditorFactory(), () => ReceiverPlatform.StatusCode(input, options.DryRun) == "ready") : null;
         var displays = MacDisplayProbe.Read();
         var displayCapability = displays.Succeeded ? MacDisplayGeometry.Capability(displays.Displays) : null;
+        var focusCheck = ReceiverDistribution.SupportsTextInspection && !options.DryRun && textFocus is not null;
         await Send(socket, CreateHello(Environment.MachineName, ReceiverPlatform.Id,
-            options.DryRun, status, Focus(status), liveText is not null, VolumeAvailable(status), displayCapability), lifetime.Token);
-        var session = new ActionSession(input, liveText: liveText, systemVolume: _volume);
+            options.DryRun, status, Focus(status), liveText is not null, VolumeAvailable(status), displayCapability, focusCheck), lifetime.Token);
+        var session = new ActionSession(input, liveText: liveText, systemVolume: _volume,
+            textFocus: focusCheck ? () => textFocus!.Read().Kind : null);
         var buffer = new byte[Protocol.MaximumFrameBytes + 1];
         while (socket.State == WebSocketState.Open && !lifetime.IsCancellationRequested)
         {

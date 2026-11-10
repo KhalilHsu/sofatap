@@ -159,10 +159,9 @@ struct RemoteView: View {
                     composer(height: geometry.size.height < 500 ? 76 : 92)
                         .fixedSize(horizontal: false, vertical: true)
                         .layoutPriority(1)
-                        .padding(.horizontal, 12)
                 }
             }
-            .padding(.bottom, 4)
+            .padding(.bottom, composerVisible && !televisionSelected && !androidTVSelected ? 0 : 4)
         }
         .background(KareSandBackground(rings: showsAirMouse).ignoresSafeArea())
     }
@@ -367,13 +366,19 @@ struct RemoteView: View {
             guard let draft = DictationTranscript.draft(base: speechBaseDraft, transcript: transcript,
                                                        ownsDraft: speechOwnsDraft,
                                                        sessionIsActive: dictation.state != .idle) else { return }
+            // Recognition is provisional until the session ends: update only the
+            // phone, like marked IME text. The final string is sent once, below.
             if let base = speechBaseSnapshot {
                 guard let snapshot = base.replacingSelection(with: transcript) else { return }
-                model.editText(snapshot.text, selection: snapshot.selection, marked: false)
-            } else { model.draft = draft }
+                model.editText(snapshot.text, selection: snapshot.selection, marked: true)
+            } else { model.draft = draft; model.composing = true }
         }
         .onChangeCompat(of: dictation.state) { _, state in
-            if state == .idle { speechOwnsDraft = false; speechRequest = nil }
+            if state == .idle {
+                let owned = speechOwnsDraft
+                speechOwnsDraft = false; speechRequest = nil
+                if owned { model.finishDictation() }
+            }
         }
     }
 
@@ -959,7 +964,7 @@ struct RemoteView: View {
                         busy: dictation.state == .requestingPermission || dictation.state == .finishing || (speechRequest != nil && model.editorLoading))
             }
             .buttonStyle(MicrophoneButtonStyle(prepareFeedback: { dictationImpact.prepare() }))
-            .disabled(!model.controlAvailable || model.sendingText || model.composing || model.remoteTextFocus == .protected)
+            .disabled(!model.controlAvailable || model.sendingText || (model.composing && !speechBusy) || model.remoteTextFocus == .protected)
             .opacity(model.controlAvailable ? 1 : 0.45)
             .accessibilityLabel(dictation.isRecording ? String(localized: "结束听写") : speechBusy || speechRequest != nil ? String(localized: "取消语音输入") : String(localized: "开始语音输入"))
             .accessibilityValue(dictation.isRecording ? String(localized: "麦克风正在录音") : dictation.state == .finishing ? String(localized: "正在整理听写结果") : "")
@@ -996,8 +1001,11 @@ struct RemoteView: View {
         return model.canControl ? Palette.mint : Palette.muted
     }
 
+    /// Tool row (trash / keyboard / remote backspace) → input bar → delivery hint,
+    /// on one opaque sand panel that sits on the keyboard's top edge.
     private func composer(height: Double) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 0) {
+            composerActions
             HStack(alignment: .bottom, spacing: 0) {
                 ZStack(alignment: .topLeading) {
                     if model.draft.isEmpty {
@@ -1024,31 +1032,83 @@ struct RemoteView: View {
             }
             .frame(height: height)
             .background(Palette.panel, in: RoundedRectangle(cornerRadius: 18))
-            composerActions
+            composerNotice
         }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
+        .background(Kare.sand.ignoresSafeArea(.container, edges: .bottom))
+    }
+
+    private var deliveryHintFont: Font {
+        let chinese = Bundle.main.preferredLocalizations.first?.hasPrefix("zh") ?? false
+        return chinese ? .custom("PingFang SC", size: 13) : .system(size: 13)
     }
 
     @ViewBuilder
     private var composerNotice: some View {
         if let message = composerMessage {
-            Text(message)
-                .font(.system(size: 11))
-                .foregroundStyle(model.textDelivery == .uncertain ? Color.orange : Palette.muted)
-                .fixedSize(horizontal: false, vertical: true)
-                .multilineTextAlignment(.trailing)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding(.leading, 8)
-                .accessibilityIdentifier("textDeliveryStatus")
+            HStack(alignment: .firstTextBaseline, spacing: 14) {
+                Text(message)
+                    .font(deliveryHintFont)
+                    .foregroundStyle(Kare.mute)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("textDeliveryStatus")
+                ForEach(deliveryActions, id: \.identifier) { action in
+                    Button(action.title, action: action.run)
+                        .font(deliveryHintFont.weight(.semibold))
+                        .foregroundStyle(Kare.accent)
+                        .buttonStyle(.plain)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                        .disabled(model.sendingText || speechBusy)
+                        .accessibilityIdentifier(action.identifier)
+                }
+            }
+            .padding(.horizontal, 6)
+            .padding(.top, 8)
         }
+    }
+
+    private struct DeliveryAction { let title: String; let identifier: String; let run: () -> Void }
+
+    private var deliveryActions: [DeliveryAction] {
+        guard !model.usesLiveText, !model.composing, !speechBusy else { return [] }
+        switch model.textDelivery {
+        case .rejected, .noFocus:
+            return [DeliveryAction(title: String(localized: "重试"), identifier: "retryText") { resendDraft() }]
+        case .uncertain:
+            return [DeliveryAction(title: String(localized: "已上屏"), identifier: "textArrived") { model.confirmTextDelivered() },
+                    DeliveryAction(title: String(localized: "再发一次"), identifier: "resendText") { resendDraft() }]
+        default:
+            if model.sentTextWasEdited {
+                return [DeliveryAction(title: String(localized: "再发一次"), identifier: "allowTextResend") { interruptTouch(); resendAlert = true }]
+            }
+            return []
+        }
+    }
+
+    private func resendDraft() {
+        guard draftEditorControl.flushForSend() else { return }
+        interruptTouch()
+        model.retryTextDelivery()
     }
 
     private var composerMessage: String? {
         // Keep actionable delivery/connection states, without a permanent
-        // capability label under the editor.
-        if model.textDelivery == .uncertain || model.liveTextPaused { return model.textStatus }
+        // capability label under the editor. A confirmed delivery says nothing.
+        if model.liveTextPaused { return model.textStatus }
+        if !model.usesLiveText, !model.composing, !speechBusy {
+            switch model.textDelivery {
+            case .rejected, .noFocus, .uncertain: return model.textStatus
+            default: break
+            }
+        }
         if !model.controlAvailable { return String(localized: "未连接电脑，草稿会保留在手机上。") }
+        if model.textDelivery == .sent && !model.sentTextWasEdited && !model.demo { return nil }
         if model.remoteTextFocus == .protected || model.editorLoading || speechBusy || model.composing || !model.draftWithinLimit || model.sentTextWasEdited || model.textDelivery != .ready {
-            return composerStatus
+            let status = composerStatus
+            return status.isEmpty ? nil : status
         }
         return nil
     }
@@ -1073,14 +1133,8 @@ struct RemoteView: View {
                 composerIcon("arrow.clockwise", label: String(localized: "检查电脑后重新读取输入框"), identifier: "resumeLiveText") {
                     model.restartLiveTextEditing()
                 }
-            } else if !model.usesLiveText && (model.textDelivery == .uncertain || model.textDelivery == .sent || model.sentTextWasEdited) {
-                composerIcon("arrow.clockwise", label: String(localized: "检查电脑后允许重发"), identifier: "allowTextResend") {
-                    interruptTouch(); resendAlert = true
-                }
-                .disabled(model.sendingText || speechBusy)
             }
             Spacer(minLength: 0)
-            composerNotice
         }
         .frame(minHeight: 44)
     }
@@ -1121,7 +1175,9 @@ struct RemoteView: View {
     private var canAttemptSend: Bool {
         // Keep the control stable, including after an ACK. A native keyboard can
         // update its text storage before publishing the binding; flush it first.
-        !model.usesLiveText && inputEnabled && !model.sendingText && !speechBusy && model.textDelivery != .uncertain
+        // Grey while IME text or dictation is still provisional; it lights up
+        // when the final text is in the draft, instead of failing silently.
+        !model.usesLiveText && inputEnabled && !model.sendingText && !speechBusy && !model.composing && model.textDelivery != .uncertain
     }
 
     private func sendCurrentDraft() {
@@ -1150,7 +1206,8 @@ struct RemoteView: View {
         if keyboardFocused { model.openTextEditor() }
     }
     private func toggleDictation() {
-        guard !televisionSelected, model.controlAvailable, !model.sendingText, !model.composing, model.remoteTextFocus != .protected else { return }
+        // Dictation itself marks the draft as composing; it must still be stoppable.
+        guard !televisionSelected, model.controlAvailable, !model.sendingText, !model.composing || speechBusy, model.remoteTextFocus != .protected else { return }
         let releasedDrag = model.dragging
         interruptTouch()
         if dictation.isRecording {

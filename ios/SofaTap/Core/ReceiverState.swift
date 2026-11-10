@@ -88,6 +88,9 @@ struct ReceiverState: Equatable {
     var reportsTextFocus: Bool = false
     var supportsLiveText: Bool = false
     var supportsSystemVolume: Bool = false
+    /// The receiver checks for an editable focused field before typing explicit text
+    /// and answers `input_no_focus` instead of typing into nothing. Opt-in per frame.
+    var supportsNoFocusCheck: Bool = false
     var displays: [RemoteDisplay] = []
     var supportsDisplayCentering: Bool { !displays.isEmpty }
     var commandModifier: String { platform == .macos ? "win" : "ctrl" }
@@ -131,6 +134,7 @@ struct ReceiverState: Equatable {
         var state = Self.make(platform: platform, available: available, message: message)
         if message["liveText"] == nil { state.supportsLiveText = supportsLiveText }
         if message["systemVolume"] == nil { state.supportsSystemVolume = supportsSystemVolume }
+        if message["textNoFocus"] == nil { state.supportsNoFocusCheck = supportsNoFocusCheck }
         // A legacy heartbeat omits display and must keep the negotiated list.
         // Explicit null, or a malformed catalog, withdraws centering.
         if !message.keys.contains("display") { state.displays = displays }
@@ -150,6 +154,8 @@ struct ReceiverState: Equatable {
            LiveTextSnapshot.integer(capability["version"]) == 1 { state.supportsLiveText = true }
         if let capability = message["systemVolume"] as? [String: Any],
            LiveTextSnapshot.integer(capability["version"]) == 1 { state.supportsSystemVolume = true }
+        if let capability = message["textNoFocus"] as? [String: Any],
+           LiveTextSnapshot.integer(capability["version"]) == 1 { state.supportsNoFocusCheck = true }
         if let catalog = RemoteDisplay.catalog(from: message["display"]) { state.displays = catalog }
         if let focus = message["textFocus"] as? [String: Any],
            let raw = focus["state"] as? String, let kind = RemoteTextFocus(rawValue: raw),

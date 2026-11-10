@@ -543,3 +543,10 @@
 /* Air mouse two-finger scroll hint and guide card. */
 "两指上下滑 · 滚动" = "Desliza con dos dedos · Desplazar";
 "按住石子挥动手机，光标大幅移动；按住时单指在石子上滑动，光标精细移动。双指上下滑动滚动页面。轻点单击，轻点两下双击，按住不动右键，轻点后按住拖动。" = "Mantén pulsada la piedra y mueve el teléfono para desplazar mucho el puntero; mientras la mantienes, desliza un dedo sobre la piedra para un movimiento fino. Desliza dos dedos arriba o abajo para desplazar. Toca para hacer clic, toca dos veces para doble clic, mantén quieto para clic derecho y toca y mantén para arrastrar.";
+/* Explicit text delivery hints. */
+"没有送到电脑" = "No llegó al ordenador";
+"电脑上没有可输入的位置，请先点一下输入框" = "No hay dónde escribir en el ordenador. Haz clic primero en un campo de texto";
+"连接断了一下，不确定电脑收到没有" = "La conexión se cortó un momento. No se sabe si el ordenador lo recibió";
+"重试" = "Reintentar";
+"已上屏" = "Ya aparece";
+"再发一次" = "Enviar de nuevo";
