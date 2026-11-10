@@ -245,12 +245,13 @@ final class SpeechDictationController: NSObject, ObservableObject {
     }
 
     private static func microphoneAuthorization() async -> Bool {
-        switch AVAudioApplication.shared.recordPermission {
+        let session = AVAudioSession.sharedInstance()
+        switch session.recordPermission {
         case .granted: return true
         case .denied: return false
         case .undetermined:
             return await withCheckedContinuation { continuation in
-                AVAudioApplication.requestRecordPermission { continuation.resume(returning: $0) }
+                session.requestRecordPermission { continuation.resume(returning: $0) }
             }
         @unknown default: return false
         }

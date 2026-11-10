@@ -727,7 +727,7 @@ final class ControllerModel: ObservableObject {
         task.resume()
         receiveNext(task, generation: currentGeneration)
         helloTimeout = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(10))
+            try? await SofaClock.sleep(seconds: 10)
             guard !Task.isCancelled, let self, self.generation == currentGeneration, !self.connected else { return }
             let retryable = Self.mayRetryTransport(URLError(.timedOut), diagnostic: self.sessionDelegate?.rejectionReason,
                                                   status: (task.response as? HTTPURLResponse)?.statusCode)
@@ -762,7 +762,7 @@ final class ControllerModel: ObservableObject {
         if let testScheduleReconnect { testScheduleReconnect(delay, retry); return }
 #endif
         reconnectTask = Task {
-            do { try await Task.sleep(for: .seconds(delay)) }
+            do { try await SofaClock.sleep(seconds: delay) }
             catch { return }
             retry()
         }
@@ -982,7 +982,7 @@ final class ControllerModel: ObservableObject {
             while !Task.isCancelled {
                 // New receivers report only an editable-state hint, never field contents.
                 let interval = self?.receiverState.reportsTextFocus == true ? 0.75 : 5.0
-                try? await Task.sleep(for: .seconds(interval))
+                try? await SofaClock.sleep(seconds: interval)
                 guard !Task.isCancelled, let self, self.generation == currentGeneration, self.foreground else { return }
                 guard !self.pending.values.contains(where: { $0.type == "ping" }) else { continue }
                 self.send("ping", fields: [:], timeout: 8) { result in
@@ -1029,7 +1029,7 @@ final class ControllerModel: ObservableObject {
         }
         let currentGeneration = generation
         let timer = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(timeout))
+            try? await SofaClock.sleep(seconds: timeout)
             guard !Task.isCancelled else { return }
             self?.commandTimedOut(id: id, generation: currentGeneration)
         }

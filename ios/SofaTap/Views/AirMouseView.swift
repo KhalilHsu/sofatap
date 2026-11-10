@@ -17,8 +17,8 @@ struct AirMouseView: View {
             controls
         }
         .onAppear { pushGestureSettings() }
-        .onChange(of: flickRightClick) { _, _ in pushGestureSettings() }
-        .onChange(of: rightHold) { _, _ in pushGestureSettings() }
+        .onChangeCompat(of: flickRightClick) { _, _ in pushGestureSettings() }
+        .onChangeCompat(of: rightHold) { _, _ in pushGestureSettings() }
     }
 
     @AppStorage("sofatap.airMouse.flickRightClick") private var flickRightClick = false
@@ -52,7 +52,7 @@ struct AirMouseView: View {
             }
             VStack(alignment: .leading, spacing: 8) {
                 Text(String(localized: "灵敏度"))
-                    .font(.subheadline.weight(.semibold))
+                    .sofaTextStyle(.subheadline, weight: .semibold)
                 Slider(value: Binding(
                     get: { AirMouseGain.sensitivitySliderPosition(sweepDegrees: model.airMouseSweepDegrees) },
                     set: { model.setAirMouseSweepDegrees(AirMouseGain.sweepDegrees(sensitivitySliderPosition: $0)) }
@@ -82,11 +82,11 @@ struct AirMouseView: View {
         .background(Palette.background)
         .onAppear { if scenePhase == .active { model.startAirMouseSession() } }
         .onDisappear { model.stopAirMouse() }
-        .onChange(of: scenePhase) { _, phase in
+        .onChangeCompat(of: scenePhase) { _, phase in
             if phase == .active { model.startAirMouseSession() }
             else { model.airMouseFingerUp(); model.stopAirMouse() }
         }
-        .onChange(of: model.connected) { _, _ in
+        .onChangeCompat(of: model.connected) { _, _ in
             if scenePhase == .active { model.startAirMouseSession() }
         }
     }

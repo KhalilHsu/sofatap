@@ -10,7 +10,7 @@ struct SofaTapApp: App {
             RemoteView(model: controller)
                 .preferredColorScheme(.dark)
                 .tint(Palette.mint)
-                .onChange(of: scenePhase) { _, phase in
+                .onChangeCompat(of: scenePhase) { _, phase in
                     if phase == .active { controller.becameActive() }
                     else if phase == .background { controller.becameInactive() }
                     else { controller.pauseInput() }

@@ -243,7 +243,7 @@ final class WebOSTVController: ObservableObject {
         let current = epoch
         sendDeadline?.cancel()
         sendDeadline = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(3))
+            try? await SofaClock.sleep(seconds: 3)
             guard !Task.isCancelled else { return }
             self?.failIfCurrent(current)
         }
@@ -284,7 +284,7 @@ final class WebOSTVController: ObservableObject {
         deadline?.cancel()
         let current = epoch
         deadline = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(seconds))
+            try? await SofaClock.sleep(seconds: seconds)
             guard !Task.isCancelled else { return }
             self?.failIfCurrent(current)
         }
@@ -293,7 +293,7 @@ final class WebOSTVController: ObservableObject {
         let current = epoch
         heartbeat = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(15))
+                try? await SofaClock.sleep(seconds: 15)
                 guard !Task.isCancelled, let self, self.epoch == current else { return }
                 self.armDeadline(seconds: 5)
                 self.control?.ping { [weak self] ok in

@@ -26,6 +26,7 @@ struct EdgeScrollStrip: UIViewRepresentable {
     func updateUIView(_ view: ScrollInputView, context: Context) { view.configure(self) }
     static func dismantleUIView(_ view: ScrollInputView, coordinator: ()) { view.detach() }
 
+    @available(iOS 16, *)
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: ScrollInputView, context: Context) -> CGSize? {
         let height = proposal.height.flatMap { $0.isFinite ? $0 : nil } ?? 200
         return CGSize(width: Self.minimumHitWidth, height: max(Self.minimumHitWidth, height))

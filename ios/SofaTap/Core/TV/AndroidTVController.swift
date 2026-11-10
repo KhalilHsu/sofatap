@@ -562,7 +562,7 @@ final class AndroidTVController: ObservableObject {
         if let testScheduleReconnect { testScheduleReconnect(delay, retry); return }
 #endif
         reconnectTask = Task {
-            do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+            do { try await SofaClock.sleep(seconds: delay) } catch { return }
             retry()
         }
     }

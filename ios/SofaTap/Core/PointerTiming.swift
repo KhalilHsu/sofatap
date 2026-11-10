@@ -58,7 +58,7 @@ import UIKit
         guard !scheduled else { return }
         scheduled = true
         Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(2))
+            try? await SofaClock.sleep(seconds: 2)
             guard let self else { return }
             self.scheduled = false
             self.outputSequence += 1

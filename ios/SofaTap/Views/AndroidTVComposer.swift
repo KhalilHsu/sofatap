@@ -76,12 +76,12 @@ struct AndroidTVComposer: View {
         }
         .onAppear { DispatchQueue.main.async { if wantsDictation { startSpeech() } } }
         .onDisappear { cancelSpeech() }
-        .onChange(of: wantsDictation) { _, wanted in
+        .onChangeCompat(of: wantsDictation) { _, wanted in
             if wanted { startSpeech() }
             else if dictation.isRecording { dictation.stop() }
             else if dictation.state == .requestingPermission { cancelSpeech() }
         }
-        .onChange(of: active) { _, isActive in
+        .onChangeCompat(of: active) { _, isActive in
             if !isActive {
                 keyboardFocused = false
                 // Speech and microphone authorization temporarily make the app
@@ -90,14 +90,14 @@ struct AndroidTVComposer: View {
                 if dictation.state != .requestingPermission || UIApplication.shared.applicationState != .inactive { cancelSpeech() }
             }
         }
-        .onChange(of: tv.status?.tvControls?.editorEpoch) { _, _ in cancelSpeech() }
+        .onChangeCompat(of: tv.status?.tvControls?.editorEpoch) { _, _ in cancelSpeech() }
         .onReceive(dictation.$transcript) { transcript in
             guard active, speechEditor == tv.status?.tvControls?.editorEpoch,
                   let value = DictationTranscript.draft(base: speechBase, transcript: transcript,
                                                        ownsDraft: speechOwnsDraft, sessionIsActive: dictation.state != .idle) else { return }
             tv.textDraft.text = value
         }
-        .onChange(of: dictation.state) { _, state in
+        .onChangeCompat(of: dictation.state) { _, state in
             if state == .idle { speechOwnsDraft = false; wantsDictation = false }
         }
         .alert(String(localized: "检查电视后继续"), isPresented: $showUncertain) {

@@ -13,6 +13,8 @@
 		D4C33D44E5F60718293A4B5C /* AirMouseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D22C33D4E5F60718293A4B /* AirMouseView.swift */; };
 		0880E9F8731F50DEA8E7378E /* AndroidTVPairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6DC33E8052762AFA900FC59 /* AndroidTVPairingView.swift */; };
 		0BE3084A48A20D1B2A26FF38 /* PeerTransportDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B025E89091221B07940DE33 /* PeerTransportDiscovery.swift */; };
+		A15C0E0115C0E0115C0E0115 /* IOS15Compat.swift in Sources */ = {isa = PBXBuildFile; fileRef = A15C0E0215C0E0215C0E0216 /* IOS15Compat.swift */; };
+		B15C0E0315C0E0315C0E0317 /* SofaClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = B15C0E0415C0E0415C0E0418 /* SofaClock.swift */; };
 		0C3B35855B50DA22F878C842 /* PairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8F19D4B8423478A9CA42C50 /* PairingView.swift */; };
 		14781C4CA2D4BF8AA1B01BFC /* AndroidTVController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51766130EE2B9540E1118AD5 /* AndroidTVController.swift */; };
 		235031F88751C7AF87089F98 /* ControllerModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A3175A3377E3E1F6F1FD381 /* ControllerModel.swift */; };
@@ -67,6 +69,8 @@
 		C3D22C33D4E5F60718293A4B /* AirMouseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirMouseView.swift; sourceTree = "<group>"; };
 		073F44E198299E317E1E4D3D /* NativeControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeControls.swift; sourceTree = "<group>"; };
 		0CD153A949AB5AE1D0EF3CC3 /* GestureConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GestureConfiguration.swift; sourceTree = "<group>"; };
+		A15C0E0215C0E0215C0E0216 /* IOS15Compat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOS15Compat.swift; sourceTree = "<group>"; };
+		B15C0E0415C0E0415C0E0418 /* SofaClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SofaClock.swift; sourceTree = "<group>"; };
 		0FC98CB31D572AB388B6B719 /* SofaTap.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SofaTap.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A4540689F5AEF8C5E7E7475 /* PointerTiming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointerTiming.swift; sourceTree = "<group>"; };
 		1B97D575181E25F83B3EFBFD /* UnlockCredentialVault.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnlockCredentialVault.swift; sourceTree = "<group>"; };
@@ -149,6 +153,7 @@
 				53495476F4E1A21926CBCAD3 /* DeviceGuideContext.swift */,
 				CB516F458F92F797A2D61F61 /* EdgeScrollGesture.swift */,
 				0CD153A949AB5AE1D0EF3CC3 /* GestureConfiguration.swift */,
+				A15C0E0215C0E0215C0E0216 /* IOS15Compat.swift */,
 				6898F264D24CA602D5304DA0 /* Pairing.swift */,
 				F17CF4D2856EC5897FC4CE23 /* PairingAttemptState.swift */,
 				464B9D8EC8DF4BC68A96EDCA /* PairingCode.swift */,
@@ -157,6 +162,7 @@
 				1A4540689F5AEF8C5E7E7475 /* PointerTiming.swift */,
 				8836BE62D39309B8AF525D9F /* ReceiverState.swift */,
 				8E456A2636B418FE1F7D1358 /* SavedDevice.swift */,
+				B15C0E0415C0E0415C0E0418 /* SofaClock.swift */,
 				1CFE8991201D1F2D103B6851 /* SpeechDictationController.swift */,
 				895EB1B944638483C701ADDC /* TouchGestureState.swift */,
 				A5B5E1C1C1C0D5EEC852A841 /* TVAuxiliaryControls.swift */,
@@ -351,6 +357,8 @@
 				0C3B35855B50DA22F878C842 /* PairingView.swift in Sources */,
 				AA37B03A8B49F6EEE62ADC1E /* PeerTLSBridge.swift in Sources */,
 				0BE3084A48A20D1B2A26FF38 /* PeerTransportDiscovery.swift in Sources */,
+				A15C0E0115C0E0115C0E0115 /* IOS15Compat.swift in Sources */,
+				B15C0E0315C0E0315C0E0317 /* SofaClock.swift in Sources */,
 				236D7795AA6EDE0FC0192473 /* PointerTiming.swift in Sources */,
 				DB24AEDE5DA4BDD2DDD5E78B /* ReceiverState.swift in Sources */,
 				E535D68E8BB20BB759348ADE /* RemoteGuideView.swift in Sources */,
@@ -509,7 +517,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -570,7 +578,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";

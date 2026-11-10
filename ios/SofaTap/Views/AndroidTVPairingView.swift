@@ -11,15 +11,15 @@ struct AndroidTVPairingView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 Label("Android TV / Google TV", systemImage: "tv")
-                    .font(.title2.weight(.semibold)).foregroundStyle(Palette.mint)
+                    .sofaTextStyle(.title2, weight: .semibold).foregroundStyle(Palette.mint)
                 Text(String(localized: "在电视上打开 Sofatap 接收器，扫描原生界面中的二维码。手机与电视需要连接同一家庭网络。"))
                     .foregroundStyle(Palette.muted)
                 Button { showScanner = true } label: {
                     Label(String(localized: "扫描电视二维码"), systemImage: "qrcode.viewfinder")
                         .frame(maxWidth: .infinity, minHeight: 48)
                 }.buttonStyle(.borderedProminent).disabled(tv.busy)
-                TextField("sofatap://tv?host=…", text: $rawLink, axis: .vertical)
-                    .lineLimit(3...5).font(.caption.monospaced()).privacySensitive()
+                SofaVerticalTextField(prompt: "sofatap://tv?host=…", text: $rawLink, limit: 5)
+                    .sofaMonospacedCaption().privacySensitive()
                     .textInputAutocapitalization(.never).autocorrectionDisabled()
                     .padding(16).background(Palette.panel, in: RoundedRectangle(cornerRadius: 16))
                     .accessibilityLabel(String(localized: "电视配对链接"))

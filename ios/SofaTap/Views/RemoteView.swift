@@ -168,19 +168,18 @@ struct RemoteView: View {
             PairingView(model: model, tv: tv, androidTV: androidTV, selectAndroidTV: selectAndroidTelevision,
                         selectTV: selectTelevision, selectComputer: { selectComputer(reconnect: false) },
                         androidSelected: androidTVSelected, incomingLink: $incomingPairingLink)
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
+                .sofaSheet(.mediumLarge)
         }
         .sheet(isPresented: $tvRemoteSetupSheet) {
-            AndroidTVRemoteSetupView(tv: androidTV).presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
+            AndroidTVRemoteSetupView(tv: androidTV).sofaSheet(.mediumLarge)
         }
         .sheet(isPresented: $tvDirectionSheet) {
-            AndroidTVDirectionButtons(tv: androidTV).presentationDetents([.height(300)]).presentationDragIndicator(.visible)
+            AndroidTVDirectionButtons(tv: androidTV).sofaSheet(.height300)
         }
         .sheet(isPresented: $guideSheet) { RemoteGuideView(configuration: gestureConfiguration, context: guideContext) }
         .sheet(isPresented: $volumeSheet) {
             SystemVolumeSheet(model: model)
-                .presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
+                .sofaSheet(.mediumLarge)
         }
         .sheet(isPresented: $gestureSettingsSheet) {
             GestureSettingsView(configuration: Binding(
@@ -240,38 +239,38 @@ struct RemoteView: View {
             incomingPairingLink = url.absoluteString
             pairingSheet = true
         }
-        .onChange(of: model.focusRevision) { _, _ in applyRemoteFocus() }
-        .onChange(of: model.desktopControlEnabled) { _, enabled in
+        .onChangeCompat(of: model.focusRevision) { _, _ in applyRemoteFocus() }
+        .onChangeCompat(of: model.desktopControlEnabled) { _, enabled in
             // Covers explicit computer pairing links delivered by the OS.
             stopInteraction()
             composerVisible = false
             remoteFocus.reset()
             if enabled { tv.disconnect(); androidTV.setTargetSelected(false) }
         }
-        .onChange(of: androidTV.acceptedInputFeedback) { _, _ in
+        .onChangeCompat(of: androidTV.acceptedInputFeedback) { _, _ in
             if androidTVSelected && scenePhase == .active { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
         }
-        .onChange(of: androidTV.rejectedInputFeedback) { _, _ in
+        .onChangeCompat(of: androidTV.rejectedInputFeedback) { _, _ in
             if androidTVSelected && scenePhase == .active { UINotificationFeedbackGenerator().notificationOccurred(.warning) }
         }
-        .onChange(of: androidTV.selectedDeviceID) { _, _ in
+        .onChangeCompat(of: androidTV.selectedDeviceID) { _, _ in
             tvWantsDictation = false; tvKeyboardFocused = false; composerVisible = false
         }
-        .onChange(of: androidTV.status?.tvControls?.editorEpoch) { old, new in
+        .onChangeCompat(of: androidTV.status?.tvControls?.editorEpoch) { old, new in
             guard androidTVSelected, scenePhase == .active else { return }
             tvWantsDictation = false
             if new != nil && old != new && !pairingSheet && !guideSheet && !gestureSettingsSheet && !tvRemoteSetupSheet && !tvDirectionSheet {
                 composerVisible = true; tvKeyboardFocused = true
             } else if new == nil { tvKeyboardFocused = false }
         }
-        .onChange(of: androidTV.phase) { _, phase in
+        .onChangeCompat(of: androidTV.phase) { _, phase in
             if androidTVSelected && phase != .ready { touchControl.cancel(); tvNavigationControl.cancel(); tvAuxiliaryControl.cancel() }
             if androidTVSelected && phase == .ready && scenePhase == .active && !pairingSheet && !guideSheet && !gestureSettingsSheet && !tvRemoteSetupSheet { androidTV.resumeInput() }
         }
-        .onChange(of: androidTV.canControl) { _, available in
+        .onChangeCompat(of: androidTV.canControl) { _, available in
             if androidTVSelected && !available { touchControl.cancel(); tvNavigationControl.cancel(); tvAuxiliaryControl.cancel() }
         }
-        .onChange(of: tv.phase) { _, phase in
+        .onChangeCompat(of: tv.phase) { _, phase in
             if televisionSelected && !androidTVSelected && phase != .ready { touchControl.cancel(); tvNavigationControl.cancel(); tvAuxiliaryControl.cancel() }
             if televisionSelected && !androidTVSelected && phase == .ready && scenePhase == .active && !pairingSheet && !guideSheet && !gestureSettingsSheet { tv.resumeInput() }
         }
@@ -279,18 +278,18 @@ struct RemoteView: View {
 
     private var desktopEvents: some View {
         connectionEvents
-        .onChange(of: model.liveTextStatus) { _, _ in
+        .onChangeCompat(of: model.liveTextStatus) { _, _ in
             if model.liveTextPaused || (model.usesLiveText && model.liveTextStatus == .idle && speechRequest != nil) {
                 cancelSpeech()
             }
         }
-        .onChange(of: model.dragging) { _, dragging in
+        .onChangeCompat(of: model.dragging) { _, dragging in
             if !dragging { applyRemoteFocus() }
         }
-        .onChange(of: model.canControl) { _, enabled in
+        .onChangeCompat(of: model.canControl) { _, enabled in
             if enabled { applyRemoteFocus() }
         }
-        .onChange(of: model.controlAvailable) { _, available in
+        .onChangeCompat(of: model.controlAvailable) { _, available in
             // A pending drag release blocks new input without disconnecting or
             // stopping dictation. Only session/permission loss resets UI state.
             if !available && !televisionSelected { remoteFocus.reset(); stopInteraction() }
@@ -299,37 +298,37 @@ struct RemoteView: View {
 
     private var interactionEvents: some View {
         desktopEvents
-        .onChange(of: tvRemoteSetupSheet) { _, shown in
+        .onChangeCompat(of: tvRemoteSetupSheet) { _, shown in
             if shown { stopInteraction() } else { resumeCurrentInput() }
         }
-        .onChange(of: pairingSheet) { _, shown in
+        .onChangeCompat(of: pairingSheet) { _, shown in
             if shown { stopInteraction() }
             else { resumeCurrentInput() }
         }
-        .onChange(of: guideSheet) { _, shown in
+        .onChangeCompat(of: guideSheet) { _, shown in
             if shown { stopInteraction() }
             else { resumeCurrentInput() }
         }
-        .onChange(of: gestureSettingsSheet) { _, shown in
+        .onChangeCompat(of: gestureSettingsSheet) { _, shown in
             if shown { stopInteraction() }
             else { resumeCurrentInput() }
         }
-        .onChange(of: volumeSheet) { _, shown in
+        .onChangeCompat(of: volumeSheet) { _, shown in
             if shown { stopInteraction() }
             else { resumeCurrentInput() }
         }
-        .onChange(of: gesturePreferences) { _, preferences in
+        .onChangeCompat(of: gesturePreferences) { _, preferences in
             touchControl.cancel(); tvNavigationControl.cancel(); tvAuxiliaryControl.cancel()
             model.setPointerSpeed(preferences[.computer].pointerSpeed)
             if !model.demo { _ = preferences.save(to: .standard) }
         }
-        .onChange(of: model.pairingError) { _, error in
+        .onChangeCompat(of: model.pairingError) { _, error in
             if !televisionSelected && error != nil && !pairingSheet { stopInteraction(); pairingSheet = true }
         }
-        .onChange(of: dictation.errorMessage) { _, error in
+        .onChangeCompat(of: dictation.errorMessage) { _, error in
             if error != nil { interruptTouch(); showingSpeechError = true }
         }
-        .onChange(of: scenePhase) { _, phase in
+        .onChangeCompat(of: scenePhase) { _, phase in
             if phase == .background { stopInteraction(); tv.disconnect(); androidTV.becameInactive() }
             else if phase == .inactive {
                 interruptTouch()
@@ -357,7 +356,7 @@ struct RemoteView: View {
                 model.editText(snapshot.text, selection: snapshot.selection, marked: false)
             } else { model.draft = draft }
         }
-        .onChange(of: dictation.state) { _, state in
+        .onChangeCompat(of: dictation.state) { _, state in
             if state == .idle { speechOwnsDraft = false; speechRequest = nil }
         }
     }
@@ -507,11 +506,15 @@ struct RemoteView: View {
                     }
                 }
             } else {
-                edgeScrollStrip
-                    .frame(width: EdgeScrollStrip.minimumHitWidth)
-                    .frame(maxWidth: .infinity, alignment: layoutDirection == .rightToLeft ? .leading : .trailing)
-                    .padding(.top, 80).padding(.bottom, 16)
-                    .padding(layoutDirection == .rightToLeft ? .leading : .trailing, 8)
+                GeometryReader { geometry in
+                    edgeScrollStrip
+                        .frame(width: EdgeScrollStrip.minimumHitWidth,
+                               height: max(EdgeScrollStrip.minimumHitWidth, geometry.size.height - 96))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity,
+                               alignment: layoutDirection == .rightToLeft ? .topLeading : .topTrailing)
+                        .padding(.top, 80)
+                        .padding(layoutDirection == .rightToLeft ? .leading : .trailing, 8)
+                }
             }
         }
         .overlay(alignment: .top) {
@@ -535,7 +538,7 @@ struct RemoteView: View {
             .padding(.top, 86)
         }
         .animation(.easeInOut(duration: 0.2), value: showsAirMouse)
-        .onChange(of: showsAirMouse) { _, show in
+        .onChangeCompat(of: showsAirMouse) { _, show in
             if !show { model.stopAirMouse() }
         }
         .overlay(alignment: .bottom) {
@@ -567,8 +570,8 @@ struct RemoteView: View {
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: shortcutPanel == nil)
         .clipShape(RoundedRectangle(cornerRadius: 40, style: .continuous))
-        .onChange(of: inputEnabled) { _, enabled in if !enabled { closeShortcutPanel() } }
-        .onChange(of: televisionSelected) { _, _ in closeShortcutPanel() }
+        .onChangeCompat(of: inputEnabled) { _, enabled in if !enabled { closeShortcutPanel() } }
+        .onChangeCompat(of: televisionSelected) { _, _ in closeShortcutPanel() }
     }
 
     private func handleShortcutPanel(_ event: TouchSurface.ShortcutPanelEvent) {
@@ -721,7 +724,7 @@ struct RemoteView: View {
                     .font(.system(size: 20)).frame(width: 48, height: 52)
                     .contentShape(Rectangle())
                     .foregroundStyle(Palette.mint.opacity(tvKeyboardFocused ? 1 : 0.65))
-                    .contentTransition(reduceMotion ? .opacity : .symbolEffect(.replace))
+                    .sofaSymbolReplace(reduceMotion: reduceMotion)
                     .animation(reduceMotion ? nil : .easeInOut(duration: 0.20), value: tvKeyboardFocused)
                     .background(tvKeyboardFocused ? Palette.mint.opacity(0.10) : .clear, in: RoundedRectangle(cornerRadius: 14))
             }
@@ -761,7 +764,7 @@ struct RemoteView: View {
                     .font(.system(size: 20)).frame(width: 48, height: 52)
                     .contentShape(Rectangle())
                     .foregroundStyle(Palette.mint.opacity(keyboardFocused ? 1 : 0.65))
-                    .contentTransition(reduceMotion ? .opacity : .symbolEffect(.replace))
+                    .sofaSymbolReplace(reduceMotion: reduceMotion)
                     .animation(reduceMotion ? nil : .easeInOut(duration: 0.20), value: keyboardFocused)
                     .background(keyboardFocused ? Palette.mint.opacity(0.10) : .clear,
                                 in: RoundedRectangle(cornerRadius: 14))
@@ -940,7 +943,7 @@ struct RemoteView: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 15, weight: .medium))
-                .contentTransition(reduceMotion ? .opacity : .symbolEffect(.replace))
+                .sofaSymbolReplace(reduceMotion: reduceMotion)
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.20), value: keyboardFocused)
                 .frame(width: 44, height: 44)
                 .foregroundStyle(Palette.muted)
@@ -1129,7 +1132,7 @@ private struct MicrophoneButtonStyle: ButtonStyle {
             // Keep the full target while its visible surface compresses.
             .frame(width: 64, height: 64)
             .contentShape(Circle())
-            .onChange(of: pressed) { _, down in
+            .onChangeCompat(of: pressed) { _, down in
                 if down { prepareFeedback() }
             }
     }
@@ -1151,7 +1154,7 @@ private struct SystemVolumeSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
+        SofaNavigationStack {
             Form {
                 Section {
                     volumeButton(.down, title: String(localized: "音量减"), symbol: "speaker.wave.1")
@@ -1168,7 +1171,7 @@ private struct SystemVolumeSheet: View {
                 }
                 .listRowBackground(Palette.panel)
             }
-            .scrollContentBackground(.hidden).background(Palette.background)
+            .sofaHiddenScrollBackground().background(Palette.background)
             .navigationTitle(String(localized: "电脑系统音量"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1226,9 +1229,9 @@ private struct DesktopShortcutPanel: View {
                         }
                         .padding(.horizontal, 28).padding(.vertical, 8)
                     }
-                    .scrollDisabled(tracking)
+                    .sofaScrollDisabled(tracking)
                     .onAppear { proxy.scrollTo(selection.index, anchor: .center) }
-                    .onChange(of: selection.index) { _, index in
+                    .onChangeCompat(of: selection.index) { _, index in
                         withAnimation(.easeOut(duration: 0.12)) { proxy.scrollTo(index, anchor: .center) }
                     }
                 }

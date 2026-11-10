@@ -11,7 +11,7 @@ struct RemoteGuideView: View {
     private var currentConfiguration: GestureConfiguration { context.configuration(configuration) }
 
     var body: some View {
-        NavigationStack {
+        SofaNavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     deviceCard
@@ -61,7 +61,7 @@ struct RemoteGuideView: View {
         VStack(alignment: .leading, spacing: 10) {
             Label(target == .television ? String(localized: "电视操作指南") : String(localized: "电脑操作指南"),
                   systemImage: target == .television ? "tv" : "desktopcomputer")
-                .font(.title2.weight(.semibold))
+                .sofaTextStyle(.title2, weight: .semibold)
             Text(context.deviceName).font(.headline)
                 .accessibilityIdentifier("guideDeviceName")
             HStack {

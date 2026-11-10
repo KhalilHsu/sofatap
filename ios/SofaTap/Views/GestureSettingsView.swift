@@ -24,7 +24,7 @@ struct GestureSettingsView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        SofaNavigationStack {
             Form {
                 presetSection
                 if target == .computer { airMouseSection }
@@ -40,7 +40,7 @@ struct GestureSettingsView: View {
                 }
                 .listRowBackground(Palette.panel)
             }
-            .scrollContentBackground(.hidden)
+            .sofaHiddenScrollBackground()
             .background(Palette.background)
             .navigationTitle(String(localized: "手势设置"))
             .navigationBarTitleDisplayMode(.inline)
@@ -110,7 +110,7 @@ struct GestureSettingsView: View {
                 Button { choose(preset) } label: {
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 5) {
-                            Text(preset.title).font(.body.weight(.semibold)).foregroundStyle(.primary)
+                            Text(preset.title).sofaTextStyle(.body, weight: .semibold).foregroundStyle(.primary)
                             Text(preset.detail(for: target)).font(.footnote).foregroundStyle(Palette.muted)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -175,7 +175,7 @@ struct GestureSettingsView: View {
                             }
                         }.multilineTextAlignment(.trailing)
                         Image(systemName: "chevron.up.chevron.down")
-                            .font(.caption.weight(.semibold)).foregroundStyle(Palette.muted)
+                            .sofaTextStyle(.caption, weight: .semibold).foregroundStyle(Palette.muted)
                             .accessibilityHidden(true)
                     }
                     .fixedSize(horizontal: false, vertical: true)
@@ -280,11 +280,11 @@ struct GesturePracticeView: View {
     @State private var lastClick: (action: GestureAction, time: Double)?
 
     var body: some View {
-        NavigationStack {
+        SofaNavigationStack {
             VStack(spacing: 20) {
                 VStack(spacing: 8) {
-                    Text(result).font(.title2.weight(.semibold)).foregroundStyle(Palette.mint)
-                        .multilineTextAlignment(.center).contentTransition(.numericText())
+                    Text(result).sofaTextStyle(.title2, weight: .semibold).foregroundStyle(Palette.mint)
+                        .multilineTextAlignment(.center).sofaNumericText()
                         .accessibilityIdentifier("gesturePracticeResult")
                     Text(String(localized: "练习只在手机内显示反馈，不会操作已连接的设备。"))
                         .font(.footnote).foregroundStyle(Palette.muted).multilineTextAlignment(.center)

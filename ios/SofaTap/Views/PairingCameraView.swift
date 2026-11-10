@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import AVFoundation
 
 struct ScannerSheet: View {
@@ -8,7 +9,7 @@ struct ScannerSheet: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var error: String?
     var body: some View {
-        NavigationStack {
+        SofaNavigationStack {
             ZStack {
                 Color.black
                 QRScanner(isActive: scenePhase == .active, accepts: accepts, onScan: onScan, onError: { error = $0 })
@@ -51,8 +52,8 @@ final class ScannerController: UIViewController, AVCaptureMetadataOutputObjectsD
     private let onScan: (String) -> Void
     private let onError: (String) -> Void
     private var preview: AVCaptureVideoPreviewLayer?
-    private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
-    private var previewRotationObservation: NSKeyValueObservation?
+    private var previewAngleBinder: AnyObject?
+    private var orientationObserver: NSObjectProtocol?
     private var scanned = false
     private var stopped = false
     private var wantsActive: Bool
@@ -107,22 +108,40 @@ final class ScannerController: UIViewController, AVCaptureMetadataOutputObjectsD
         layer.frame = view.bounds
         view.layer.addSublayer(layer)
         preview = layer
-        // The sensor's native orientation differs between iPhone and iPad.
-        // Observe AVFoundation's preview angle rather than assuming portrait.
-        let rotation = AVCaptureDevice.RotationCoordinator(device: camera, previewLayer: layer)
-        rotationCoordinator = rotation
-        previewRotationObservation = rotation.observe(\.videoRotationAngleForHorizonLevelPreview,
-                                                       options: [.initial, .new]) { [weak self] rotation, _ in
-            let angle = rotation.videoRotationAngleForHorizonLevelPreview
-            // RotationCoordinator delivers preview-angle observations on main.
-            guard let self, !self.stopped, let connection = self.preview?.connection,
-                  connection.isVideoRotationAngleSupported(angle) else { return }
-            connection.videoRotationAngle = angle
+        // iOS 17 follows the preview angle. iOS 15 uses the interface orientation.
+        if #available(iOS 17, *) {
+            let binder = PreviewAngleBinder()
+            binder.bind(camera: camera, layer: layer) { [weak self] in self?.stopped == true }
+            previewAngleBinder = binder
+        } else {
+            applyLegacyVideoOrientation()
+            UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+            orientationObserver = NotificationCenter.default.addObserver(
+                forName: UIDevice.orientationDidChangeNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                self?.applyLegacyVideoOrientation()
+            }
         }
         configured = true
         updateCaptureRunning()
     }
-    override func viewDidLayoutSubviews() { super.viewDidLayoutSubviews(); preview?.frame = view.bounds }
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        preview?.frame = view.bounds
+        if #unavailable(iOS 17) { applyLegacyVideoOrientation() }
+    }
+    private func applyLegacyVideoOrientation() {
+        guard let connection = preview?.connection, connection.isVideoOrientationSupported else { return }
+        let interface = view.window?.windowScene?.interfaceOrientation ?? .portrait
+        let orientation: AVCaptureVideoOrientation
+        switch interface {
+        case .portraitUpsideDown: orientation = .portraitUpsideDown
+        case .landscapeLeft: orientation = .landscapeLeft
+        case .landscapeRight: orientation = .landscapeRight
+        default: orientation = .portrait
+        }
+        connection.videoOrientation = orientation
+    }
     func metadataOutput(_ output: AVCaptureMetadataOutput, didOutput metadataObjects: [AVMetadataObject], from connection: AVCaptureConnection) {
         guard wantsActive, !stopped, !scanned, let value = (metadataObjects.first as? AVMetadataMachineReadableCodeObject)?.stringValue else { return }
         // Invalid or unrelated QRs stay in the scanner with actionable feedback.
@@ -153,8 +172,28 @@ final class ScannerController: UIViewController, AVCaptureMetadataOutputObjectsD
     }
     func stop() {
         stopped = true
-        previewRotationObservation = nil
-        rotationCoordinator = nil
+        previewAngleBinder = nil
+        if let orientationObserver {
+            NotificationCenter.default.removeObserver(orientationObserver)
+            self.orientationObserver = nil
+        }
         updateCaptureRunning()
+    }
+}
+
+@available(iOS 17, *)
+private final class PreviewAngleBinder {
+    private var coordinator: AVCaptureDevice.RotationCoordinator?
+    private var observation: NSKeyValueObservation?
+
+    func bind(camera: AVCaptureDevice, layer: AVCaptureVideoPreviewLayer, isStopped: @escaping () -> Bool) {
+        let rotation = AVCaptureDevice.RotationCoordinator(device: camera, previewLayer: layer)
+        coordinator = rotation
+        observation = rotation.observe(\.videoRotationAngleForHorizonLevelPreview, options: [.initial, .new]) { rotation, _ in
+            let angle = rotation.videoRotationAngleForHorizonLevelPreview
+            guard !isStopped(), let connection = layer.connection,
+                  connection.isVideoRotationAngleSupported(angle) else { return }
+            connection.videoRotationAngle = angle
+        }
     }
 }
