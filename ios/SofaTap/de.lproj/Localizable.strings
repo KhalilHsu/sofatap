@@ -540,3 +540,6 @@
 "辉长岩" = "Gabbro";
 "板岩" = "Schiefer";
 "绿岩" = "Grünstein";
+/* Air mouse two-finger scroll hint and guide card. */
+"两指上下滑 · 滚动" = "Mit zwei Fingern wischen · Scrollen";
+"按住石子挥动手机，光标大幅移动；按住时单指在石子上滑动，光标精细移动。双指上下滑动滚动页面。轻点单击，轻点两下双击，按住不动右键，轻点后按住拖动。" = "Stein halten und das Telefon schwenken für große Zeigerbewegungen; beim Halten mit einem Finger über den Stein gleiten für feine Bewegungen. Mit zwei Fingern nach oben oder unten wischen zum Scrollen. Tippen zum Klicken, zweimal tippen für Doppelklick, still halten für Rechtsklick, tippen und dann halten zum Ziehen.";

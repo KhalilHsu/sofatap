@@ -1,8 +1,9 @@
 import Foundation
 
-/// One-thumb gestures on the air-mouse card. Pointer math stays in `AirMouseTracker`;
+/// Thumb gestures on the air-mouse card. Pointer math stays in `AirMouseTracker`;
 /// this type only decides which of those deltas, clicks, drags and scrolls to emit.
-/// A second finger cancels the press. No protocol types are invented here.
+/// One thumb: gyro coarse move plus thumb fine move. Two fingers: vertical scroll.
+/// No protocol types are invented here.
 struct AirMouseCardGesture {
     struct Point: Equatable {
         var x: Double
@@ -15,6 +16,8 @@ struct AirMouseCardGesture {
         var tapFreeze = 0.10
         var scrollTravel = 10.0
         var flickTravel = 40.0
+        /// The flick must cover `flickTravel` this soon after touch-down.
+        var flickWindow = 0.15
         /// Backup right click. Off unless the user enables 「横划右键」.
         var flickRightClickEnabled = false
         var doubleTapInterval = 0.30
@@ -27,6 +30,16 @@ struct AirMouseCardGesture {
         /// Gyro motion larger than this, from the touch-down pose, is not "still".
         var tremor = 0.02
         var inertiaSteps = 3
+        /// Thumb fine move as a fraction of the trackpad's base gain. The trackpad
+        /// sends finger points × `pointerSpeed` (× 1.0 at precise speeds), so the
+        /// stone sends finger points × 0.4 × `pointerSpeed`, added to the gyro.
+        static let fineMoveTrackpadFraction = 0.4
+        var fineMoveGain = Config.fineMoveTrackpadFraction
+        /// The trackpad pointer speed setting (GestureConfiguration.pointerSpeed).
+        var pointerSpeed = 1.0  // GestureConfiguration.defaultPointerSpeed
+        /// One-finger fine moves this vertical (travel > 2× horizontal and > 30 pt)
+        /// look like an attempted scroll; the page may re-show the two-finger hint.
+        var verticalSlideTravel = 30.0
     }
 
     enum Haptic: Equatable {
@@ -46,24 +59,30 @@ struct AirMouseCardGesture {
     }
 
     var config = Config()
-    private enum Phase { case idle, tracking, rightReady, scrolling, dragging, flicked, inertia }
+    private enum Phase { case idle, tracking, rightReady, dragging, flicked, twoFinger, scrolling }
     private var phase = Phase.idle
     private var downTime = 0.0
     private var origin = Point(x: 0, y: 0)
     private var last = Point(x: 0, y: 0)
     private var pitch0 = 0.0
     private var yaw0 = 0.0
-    private var sentX = 0.0
-    private var sentY = 0.0
     private var cursorMoved = false
+    private var fineMoving = false
     private var tremorBroken = false
     private var rightDisqualified = false
     private var secondTap = false
+    private var verticalNoted = false
+    private var scrollOrigin = 0.0
+    private var scrollLast = 0.0
     private var scrollAlong = 0.0
     private var pendingTap: (point: Point, deadline: Double)?
     private var inertiaLeft = 0
     private var inertiaStep = 0.0
     private(set) var needsTick = false
+    /// Two-finger scrolls started on the card. The page uses it to retire its hint.
+    private(set) var twoFingerScrolls = 0
+    /// One-finger touches whose fine move looked like a vertical scroll attempt.
+    private(set) var verticalFineSlides = 0
 
     mutating func touchDown(at point: Point, time: Double, pitch: Double, yaw: Double) -> [Action] {
         inertiaLeft = 0
@@ -81,12 +100,11 @@ struct AirMouseCardGesture {
         last = point
         pitch0 = pitch
         yaw0 = yaw
-        sentX = 0
-        sentY = 0
         cursorMoved = false
+        fineMoving = false
         tremorBroken = false
         rightDisqualified = second
-        scrollAlong = 0
+        verticalNoted = false
         needsTick = true
         return actions
     }
@@ -114,57 +132,56 @@ struct AirMouseCardGesture {
         return forward(dx, dy, time: time)
     }
 
+    /// One thumb moved. Past `tapSlop` it becomes fine pointer motion on top of the gyro.
     mutating func touchMove(to point: Point, time: Double) -> [Action] {
-        guard phase == .tracking || phase == .rightReady else {
-            guard phase == .scrolling else { last = point; return [] }
-            let delta = (point.y - origin.y) - scrollAlong
-            scrollAlong = point.y - origin.y
-            last = point
-            return abs(delta) > 0.4 ? [.scroll(delta)] : []
+        guard phase == .tracking || phase == .rightReady || phase == .dragging else {
+            if phase != .twoFinger && phase != .scrolling { last = point }
+            return []
         }
+        let previous = last
         last = point
         let travelX = point.x - origin.x
         let travelY = point.y - origin.y
-        if secondTap && time - downTime >= config.dragArmDelay && hypot(travelX, travelY) <= config.tapSlop {
+        let travel = hypot(travelX, travelY)
+        if phase == .dragging { return fine(from: previous, to: point, time: time) }
+        if secondTap && !fineMoving && time - downTime >= config.dragArmDelay && travel <= config.tapSlop {
             phase = .dragging
             rightDisqualified = true
             return [.drag(true), .haptic(.medium)]
         }
-        if abs(travelY) >= config.scrollTravel && abs(travelY) > abs(travelX) * 1.15 {
-            phase = .scrolling
-            rightDisqualified = true
-            scrollAlong = travelY
-            var actions: [Action] = []
-            if abs(sentX) + abs(sentY) > 0.4 {
-                actions.append(.pointer(-sentX, -sentY))
-                sentX = 0
-                sentY = 0
-            }
-            actions.append(.haptic(.light))
-            actions.append(.scroll(travelY))
-            return actions
-        }
-        if config.flickRightClickEnabled && abs(travelX) >= config.flickTravel && abs(travelX) > abs(travelY) * 1.15 {
+        if config.flickRightClickEnabled && !fineMoving && time - downTime <= config.flickWindow
+            && abs(travelX) >= config.flickTravel && abs(travelX) > abs(travelY) * 1.15 {
             phase = .flicked
             rightDisqualified = true
             return [.rightClick, .haptic(.medium)]
         }
-        if hypot(travelX, travelY) > config.tapSlop { rightDisqualified = true }
-        return []
+        if travel > config.tapSlop { rightDisqualified = true }
+        if !fineMoving {
+            guard travel > config.tapSlop, time >= downTime + config.tapFreeze else { return [] }
+            // A fast sideways flick keeps its window when the backup is on.
+            if config.flickRightClickEnabled && time - downTime <= config.flickWindow
+                && abs(travelX) > abs(travelY) * 1.15 { return [] }
+            // The first event past the slop only arms fine move, so nothing jumps.
+            fineMoving = true
+            cursorMoved = true
+            if phase == .rightReady { phase = .tracking }
+            return []
+        }
+        if !verticalNoted && abs(travelY) > config.verticalSlideTravel && abs(travelY) > abs(travelX) * 2 {
+            verticalNoted = true
+            verticalFineSlides += 1
+        }
+        return fine(from: previous, to: point, time: time)
     }
 
     mutating func touchUp(time: Double) -> [Action] {
         let ended = phase
         let travel = origin.distance(to: last)
         let duration = time - downTime
+        if ended == .twoFinger || ended == .scrolling { return [] }
         phase = .idle
         needsTick = pendingTap != nil || inertiaLeft > 0
         switch ended {
-        case .scrolling:
-            inertiaLeft = config.inertiaSteps
-            inertiaStep = (last.y - origin.y) / Double(max(config.inertiaSteps, 1)) * 0.45
-            needsTick = true
-            return []
         case .dragging:
             return [.drag(false), .haptic(.light)]
         case .flicked:
@@ -185,7 +202,60 @@ struct AirMouseCardGesture {
         }
     }
 
-    mutating func extraFinger() -> [Action] {
+    /// A second finger landed (or two landed together). Ends the one-thumb phase
+    /// without clicking; a held drag button is released. Nothing else is undone.
+    mutating func twoFingerBegan(centroid: Point, time: Double) -> [Action] {
+        let wasDragging = phase == .dragging
+        phase = .twoFinger
+        pendingTap = nil
+        secondTap = false
+        inertiaLeft = 0
+        needsTick = false
+        scrollOrigin = centroid.y
+        scrollLast = centroid.y
+        scrollAlong = 0
+        return wasDragging ? [.drag(false)] : []
+    }
+
+    /// The centroid of the fingers on the card moved. `rebase` is true when the
+    /// finger count changed, so the centroid jump is not read as travel.
+    mutating func twoFingerMoved(centroid: Point, rebase: Bool = false) -> [Action] {
+        guard phase == .twoFinger || phase == .scrolling else { return [] }
+        if rebase {
+            scrollOrigin += centroid.y - scrollLast
+            scrollLast = centroid.y
+            return []
+        }
+        scrollLast = centroid.y
+        let travelY = centroid.y - scrollOrigin
+        if phase == .twoFinger {
+            guard abs(travelY) >= config.scrollTravel else { return [] }
+            phase = .scrolling
+            scrollAlong = travelY
+            twoFingerScrolls += 1
+            return [.haptic(.light), .scroll(travelY)]
+        }
+        let delta = travelY - scrollAlong
+        scrollAlong = travelY
+        return abs(delta) > 0.4 ? [.scroll(delta)] : []
+    }
+
+    /// Every finger has left the card after a two-finger phase.
+    mutating func allFingersUp(time: Double) -> [Action] {
+        let ended = phase
+        guard ended == .twoFinger || ended == .scrolling else { return touchUp(time: time) }
+        phase = .idle
+        needsTick = false
+        if ended == .scrolling {
+            inertiaLeft = config.inertiaSteps
+            inertiaStep = scrollAlong / Double(max(config.inertiaSteps, 1)) * 0.45
+            needsTick = true
+        }
+        return []
+    }
+
+    /// The system cancelled the touches. Releases a drag; nothing clicks.
+    mutating func cancel() -> [Action] {
         let wasDragging = phase == .dragging
         phase = .idle
         pendingTap = nil
@@ -194,8 +264,6 @@ struct AirMouseCardGesture {
         needsTick = false
         return wasDragging ? [.drag(false)] : []
     }
-
-    mutating func cancel() -> [Action] { extraFinger() }
 
     mutating func tick(_ time: Double) -> [Action] {
         var actions: [Action] = []
@@ -218,13 +286,22 @@ struct AirMouseCardGesture {
         return actions
     }
 
+    private mutating func fine(from previous: Point, to point: Point, time: Double) -> [Action] {
+        guard phase == .dragging || time >= downTime + config.tapFreeze else { return [] }
+        let scale = config.fineMoveGain * config.pointerSpeed
+        let dx = (point.x - previous.x) * scale
+        let dy = (point.y - previous.y) * scale
+        guard dx.isFinite, dy.isFinite, abs(dx) + abs(dy) > 0.01 else { return [] }
+        cursorMoved = true
+        rightDisqualified = true
+        return [.pointer(dx, dy)]
+    }
+
     private mutating func forward(_ dx: Double, _ dy: Double, time: Double, always: Bool = false) -> [Action] {
         if !always && time < downTime + config.tapFreeze { return [] }
         guard abs(dx) + abs(dy) > 0.4 else { return [] }
         cursorMoved = true
         rightDisqualified = true
-        sentX += dx
-        sentY += dy
         return [.pointer(dx, dy)]
     }
 }

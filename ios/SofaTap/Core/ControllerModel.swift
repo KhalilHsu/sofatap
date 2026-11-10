@@ -64,6 +64,9 @@ final class ControllerModel: ObservableObject {
     @Published private(set) var airMouseSweepDegrees = AirMouseGain.defaultSweepDegrees
     @Published private(set) var airMousePitch = 0.0
     @Published private(set) var airMouseRoll = 0.0
+    /// Card gesture counters for the page hint; they restart with each session.
+    @Published private(set) var airMouseTwoFingerScrolls = 0
+    @Published private(set) var airMouseVerticalSlides = 0
     @Published private(set) var airMouseAppearance = AirMouseStoneChoice(stone: AirMouseStones.defaultStone, rotationDegrees: 0, mirrored: false, scale: 1)
     @Published private(set) var selectedRemoteDisplayID: String?
     /// Shown when a connected receiver did not advertise display centering.
@@ -1504,6 +1507,7 @@ final class ControllerModel: ObservableObject {
     func airMouseFingerDown(x: Double, y: Double) {
         guard airSession, foreground, !airMoving else { return }
         airMoving = true
+        cardGesture.config.pointerSpeed = sensitivity
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         applyCardActions(cardGesture.touchDown(at: .init(x: x, y: y), time: movementTime, pitch: airTracker.pitch, yaw: airTracker.yaw))
     }
@@ -1523,11 +1527,32 @@ final class ControllerModel: ObservableObject {
         applyCardActions(cardGesture.touchUp(time: movementTime))
     }
 
-    func airMouseExtraFinger() {
+    /// A second finger joined (or two landed together): the card scrolls instead.
+    func airMouseTwoFingerBegan(x: Double, y: Double) {
+        guard airSession else { return }
+        airMoving = false
+        airFingerUpTime = ProcessInfo.processInfo.systemUptime
+        queuedDX = 0
+        queuedDY = 0
+        applyCardActions(cardGesture.twoFingerBegan(centroid: .init(x: x, y: y), time: movementTime))
+    }
+
+    func airMouseTwoFingerMoved(x: Double, y: Double, rebase: Bool) {
+        guard airSession else { return }
+        applyCardActions(cardGesture.twoFingerMoved(centroid: .init(x: x, y: y), rebase: rebase))
+    }
+
+    func airMouseTwoFingerEnded() {
+        airFingerUpTime = ProcessInfo.processInfo.systemUptime
+        applyCardActions(cardGesture.allFingersUp(time: movementTime))
+    }
+
+    /// UIKit cancelled the touches. A held drag is released; nothing clicks.
+    func airMouseCancelTouches() {
         airMoving = false
         queuedDX = 0
         queuedDY = 0
-        applyCardActions(cardGesture.extraFinger())
+        applyCardActions(cardGesture.cancel())
     }
 
     func setAirMouseSweepDegrees(_ value: Double) {
@@ -1675,6 +1700,8 @@ final class ControllerModel: ObservableObject {
     }
 
     private func applyCardActions(_ actions: [AirMouseCardGesture.Action]) {
+        if airMouseTwoFingerScrolls != cardGesture.twoFingerScrolls { airMouseTwoFingerScrolls = cardGesture.twoFingerScrolls }
+        if airMouseVerticalSlides != cardGesture.verticalFineSlides { airMouseVerticalSlides = cardGesture.verticalFineSlides }
         for action in actions {
             switch action {
             case .pointer(let dx, let dy):

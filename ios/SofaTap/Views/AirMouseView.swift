@@ -15,7 +15,10 @@ struct AirMouseView: View {
             AirMouseTouchLayer(onDown: { model.airMouseFingerDown(x: Double($0.x), y: Double($0.y)) },
                                onMove: { model.airMouseFingerMove(x: Double($0.x), y: Double($0.y)) },
                                onUp: { model.airMouseFingerUp() },
-                               onCancel: { model.airMouseExtraFinger() })
+                               onTwoBegan: { model.airMouseTwoFingerBegan(x: Double($0.x), y: Double($0.y)) },
+                               onTwoMoved: { model.airMouseTwoFingerMoved(x: Double($0.x), y: Double($0.y), rebase: $1) },
+                               onTwoEnded: { model.airMouseTwoFingerEnded() },
+                               onCancel: { model.airMouseCancelTouches() })
             controls
         }
         .onAppear { pushGestureSettings() }
@@ -29,6 +32,14 @@ struct AirMouseView: View {
     @AppStorage(ControllerModel.airMouseSweepKey) private var storedSweep = AirMouseGain.defaultSweepDegrees
     @AppStorage("sofatap.airMouse.hintSeen") private var hintSeen = false
     @State private var showHint = false
+    /// Two-finger scroll hint: the first three visits after this update, plus one
+    /// recovery per visit after a vertical one-finger slide. Retired by a real
+    /// two-finger scroll on this page.
+    @AppStorage("sofatap.airMouse.scrollHintVisits") private var scrollHintVisits = 0
+    @AppStorage("sofatap.airMouse.twoFingerScrollDone") private var twoFingerScrollDone = false
+    @State private var scrollHintOpacity = 0.0
+    @State private var scrollHintGeneration = 0
+    @State private var scrollHintRecoveryUsed = false
     /// Survives view rebuilds within the launch that first showed the hint.
     private static var hintShownThisLaunch = false
 
@@ -49,7 +60,9 @@ struct AirMouseView: View {
             let small = Kare.isSmallScreen
             ZStack {
                 pebble.position(local)
-                stoneLabel.position(x: local.x, y: local.y + (small ? 202 : 238) + 10)
+                stoneLabel
+                    .overlay(alignment: .bottom) { scrollHint(width: max(0, geo.size.width - 44)) }
+                    .position(x: local.x, y: local.y + (small ? 202 : 238) + 10)
                 VStack(spacing: 6) {
                     if showHint {
                         Text(airMouseHint)
@@ -79,6 +92,18 @@ struct AirMouseView: View {
 #endif
             if !hintSeen { hintSeen = true; Self.hintShownThisLaunch = true }
             showHint = Self.hintShownThisLaunch
+            beginScrollHintVisit()
+        }
+        .onDisappear { hideScrollHint(animated: false) }
+        .onChangeCompat(of: model.airMouseTwoFingerScrolls) { old, new in
+            guard new > old else { return }
+            twoFingerScrollDone = true
+            hideScrollHint(animated: !reduceMotion)
+        }
+        .onChangeCompat(of: model.airMouseVerticalSlides) { old, new in
+            guard new > old, !twoFingerScrollDone, !scrollHintRecoveryUsed else { return }
+            scrollHintRecoveryUsed = true
+            flashScrollHint()
         }
         .onAppear { if scenePhase == .active { model.startAirMouseSession() } }
         .onDisappear { model.stopAirMouse() }
@@ -92,6 +117,55 @@ struct AirMouseView: View {
     }
 
     private var airMouseHint: String { String(localized: "按住移动 · 轻点单击") }
+
+    /// 13 pt PingFang for Chinese, the system face elsewhere; one line, down to 12 pt.
+    private func scrollHint(width: CGFloat) -> some View {
+        let chinese = Bundle.main.preferredLocalizations.first?.hasPrefix("zh") ?? false
+        return Text(String(localized: "两指上下滑 · 滚动"))
+            .font(chinese ? .custom("PingFang SC", size: 13) : .system(size: 13))
+            .foregroundStyle(Kare.mute)
+            .lineLimit(1)
+            .minimumScaleFactor(12.0 / 13.0)
+            .multilineTextAlignment(.center)
+            .frame(width: width)
+            .opacity(scrollHintOpacity)
+            .accessibilityHidden(scrollHintOpacity == 0)
+            .accessibilityIdentifier("airMouseScrollHint")
+            // Hint top sits 12 pt under the stone name.
+            .alignmentGuide(.bottom) { $0[.top] - 12 }
+    }
+
+    private func beginScrollHintVisit() {
+        scrollHintRecoveryUsed = false
+#if targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("--demo-scroll-hint") {
+            scrollHintGeneration += 1
+            scrollHintOpacity = 1
+            return
+        }
+#endif
+        guard !twoFingerScrollDone, scrollHintVisits < 3 else { return }
+        scrollHintVisits += 1
+        flashScrollHint()
+    }
+
+    /// Fade in 300 ms, hold 3 s, fade out 600 ms. Reduce Motion shows and hides plainly.
+    private func flashScrollHint() {
+        scrollHintGeneration += 1
+        let generation = scrollHintGeneration
+        let plain = reduceMotion
+        if plain { scrollHintOpacity = 1 } else { withAnimation(.easeIn(duration: 0.3)) { scrollHintOpacity = 1 } }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: plain ? 3_000_000_000 : 3_300_000_000)
+            guard generation == scrollHintGeneration else { return }
+            hideScrollHint(animated: !plain)
+        }
+    }
+
+    private func hideScrollHint(animated: Bool) {
+        scrollHintGeneration += 1
+        if animated { withAnimation(.easeOut(duration: 0.6)) { scrollHintOpacity = 0 } } else { scrollHintOpacity = 0 }
+    }
 
     /// 玄武岩 Basalt — Song in ink2, then the Latin name in italic mute.
     private var stoneLabel: some View {
@@ -219,14 +293,14 @@ private struct AirMouseTouchLayer: UIViewRepresentable {
     var onDown: (CGPoint) -> Void
     var onMove: (CGPoint) -> Void
     var onUp: () -> Void
+    var onTwoBegan: (CGPoint) -> Void
+    var onTwoMoved: (CGPoint, Bool) -> Void
+    var onTwoEnded: () -> Void
     var onCancel: () -> Void
 
     func makeUIView(context: Context) -> AirMouseTouchView {
         let view = AirMouseTouchView()
-        view.onDown = onDown
-        view.onMove = onMove
-        view.onUp = onUp
-        view.onCancel = onCancel
+        updateUIView(view, context: context)
         return view
     }
 
@@ -234,16 +308,27 @@ private struct AirMouseTouchLayer: UIViewRepresentable {
         uiView.onDown = onDown
         uiView.onMove = onMove
         uiView.onUp = onUp
+        uiView.onTwoBegan = onTwoBegan
+        uiView.onTwoMoved = onTwoMoved
+        uiView.onTwoEnded = onTwoEnded
         uiView.onCancel = onCancel
     }
 }
 
+/// One thumb drives the gyro card gesture. As soon as a second finger lands the
+/// touch becomes a two-finger scroll, reported as the centroid of the fingers
+/// still down, until every finger has lifted.
 final class AirMouseTouchView: UIView {
     var onDown: ((CGPoint) -> Void)?
     var onMove: ((CGPoint) -> Void)?
     var onUp: (() -> Void)?
+    var onTwoBegan: ((CGPoint) -> Void)?
+    /// The flag is true when the finger count changed, so the centroid jump is not travel.
+    var onTwoMoved: ((CGPoint, Bool) -> Void)?
+    var onTwoEnded: (() -> Void)?
     var onCancel: (() -> Void)?
-    private var active: UITouch?
+    private var touching: [UITouch] = []
+    private var multi = false
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -253,36 +338,55 @@ final class AirMouseTouchView: UIView {
 
     required init?(coder: NSCoder) { return nil }
 
+    private var centroid: CGPoint {
+        let points = touching.map { $0.location(in: self) }
+        guard !points.isEmpty else { return .zero }
+        let count = CGFloat(points.count)
+        return CGPoint(x: points.map(\.x).reduce(0, +) / count, y: points.map(\.y).reduce(0, +) / count)
+    }
+
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        if active != nil || touches.count > 1 || (event?.allTouches?.count ?? 1) > 1 {
-            onCancel?()
-            active = nil
-            return
+        let wasEmpty = touching.isEmpty
+        touching.append(contentsOf: touches.filter { !touching.contains($0) })
+        if multi {
+            onTwoMoved?(centroid, true)
+        } else if touching.count > 1 {
+            multi = true
+            onTwoBegan?(centroid)
+        } else if wasEmpty, let touch = touching.first {
+            onDown?(touch.location(in: self))
         }
-        guard let touch = touches.first else { return }
-        active = touch
-        onDown?(touch.location(in: self))
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let active, touches.contains(active) else { return }
-        if (event?.allTouches?.count ?? 1) > 1 {
-            onCancel?()
-            self.active = nil
-            return
+        guard !touching.isEmpty else { return }
+        if multi {
+            if touching.count > 1 { onTwoMoved?(centroid, false) }
+        } else if let touch = touching.first, touches.contains(touch) {
+            onMove?(touch.location(in: self))
         }
-        onMove?(active.location(in: self))
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let active, touches.contains(active) else { return }
-        self.active = nil
-        onUp?()
+        let before = touching.count
+        touching.removeAll { touches.contains($0) }
+        guard before > 0, touching.count != before else { return }
+        if touching.isEmpty {
+            if multi { multi = false; onTwoEnded?() } else { onUp?() }
+        } else if multi {
+            onTwoMoved?(centroid, true)
+        }
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let active, touches.contains(active) else { return }
-        self.active = nil
-        onCancel?()
+        let before = touching.count
+        touching.removeAll { touches.contains($0) }
+        guard before > 0, touching.count != before else { return }
+        if touching.isEmpty {
+            multi = false
+            onCancel?()
+        } else if multi {
+            onTwoMoved?(centroid, true)
+        }
     }
 }

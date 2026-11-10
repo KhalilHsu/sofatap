@@ -540,3 +540,6 @@
 "辉长岩" = "Gabro";
 "板岩" = "Pizarra";
 "绿岩" = "Roca verde";
+/* Air mouse two-finger scroll hint and guide card. */
+"两指上下滑 · 滚动" = "Desliza con dos dedos · Desplazar";
+"按住石子挥动手机，光标大幅移动；按住时单指在石子上滑动，光标精细移动。双指上下滑动滚动页面。轻点单击，轻点两下双击，按住不动右键，轻点后按住拖动。" = "Mantén pulsada la piedra y mueve el teléfono para desplazar mucho el puntero; mientras la mantienes, desliza un dedo sobre la piedra para un movimiento fino. Desliza dos dedos arriba o abajo para desplazar. Toca para hacer clic, toca dos veces para doble clic, mantén quieto para clic derecho y toca y mantén para arrastrar.";
