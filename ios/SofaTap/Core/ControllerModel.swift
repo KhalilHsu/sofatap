@@ -64,7 +64,7 @@ final class ControllerModel: ObservableObject {
     @Published private(set) var airMouseSweepDegrees = AirMouseGain.defaultSweepDegrees
     @Published private(set) var airMousePitch = 0.0
     @Published private(set) var airMouseRoll = 0.0
-    @Published private(set) var airMouseAppearance = AirMouseStoneChoice(stone: .basalt, rotationDegrees: 0, mirrored: false, scale: 1)
+    @Published private(set) var airMouseAppearance = AirMouseStoneChoice(stone: AirMouseStones.defaultStone, rotationDegrees: 0, mirrored: false, scale: 1)
     @Published private(set) var selectedRemoteDisplayID: String?
     /// Shown when a connected receiver did not advertise display centering.
     static let recenterUnsupportedNotice = "当前接收端不支持自动回中"
@@ -1655,8 +1655,14 @@ final class ControllerModel: ObservableObject {
             airMouseAppearance = AirMouseStoneChoice(stone: stone, rotationDegrees: 0, mirrored: false, scale: 1)
             return
         }
+        if demo {
+            // Deterministic demo: always the default stone.
+            airMouseAppearance = AirMouseStoneChoice(stone: AirMouseStones.defaultStone, rotationDegrees: 0, mirrored: false, scale: 1)
+            return
+        }
 #endif
-        let previous = UserDefaults.standard.string(forKey: lastAirMouseStoneKey).flatMap(AirMouseStone.init(rawValue:))
+        // A saved basalt/slate (no longer in the pool) resolves to the default stone.
+        let previous = AirMouseStones.resolve(UserDefaults.standard.string(forKey: lastAirMouseStoneKey).flatMap(AirMouseStone.init(rawValue:)))
         var generator = SystemRandomNumberGenerator()
         func unit() -> Double { Double.random(in: 0..<1, using: &generator) }
         let choice = AirMouseStones.appearance(previous: previous, units: (unit(), unit(), unit(), unit()))

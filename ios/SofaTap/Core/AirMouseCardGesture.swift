@@ -251,11 +251,26 @@ struct AirMouseStoneChoice: Equatable {
 }
 
 enum AirMouseStones {
+    /// Stone used before the first pick and whenever a saved stone is no longer offered.
+    static let defaultStone: AirMouseStone = .granite
+
+    /// TODO: add `.basalt` and `.slate` (Gabbro) back once the designer re-exports
+    /// clean pebbles; their current assets have a broken alpha fringe. The assets
+    /// stay in the catalog.
+    static let pool: [AirMouseStone] = [.granite, .sandstone, .greenstone]
+
+    /// Maps a saved stone onto the current pool; excluded stones fall back to the default.
+    static func resolve(_ stone: AirMouseStone?) -> AirMouseStone? {
+        guard let stone else { return nil }
+        return pool.contains(stone) ? stone : defaultStone
+    }
+
     /// `unit` is in 0..<1. The previous stone is removed from the pool so a new
     /// session or connection cannot repeat it. A nil previous may return any stone.
     static func choose(previous: AirMouseStone?, unit: Double) -> AirMouseStone {
-        let pool = AirMouseStone.allCases.filter { $0 != previous }
-        let options = pool.isEmpty ? AirMouseStone.allCases : pool
+        let previous = resolve(previous)
+        let remaining = pool.filter { $0 != previous }
+        let options = remaining.isEmpty ? pool : remaining
         let clamped = unit.isFinite ? min(0.999999, max(0, unit)) : 0
         let index = min(options.count - 1, Int(clamped * Double(options.count)))
         return options[index]
