@@ -1661,7 +1661,6 @@ final class ControllerModel: ObservableObject {
             return
         }
 #endif
-        // A saved basalt/slate (no longer in the pool) resolves to the default stone.
         let previous = AirMouseStones.resolve(UserDefaults.standard.string(forKey: lastAirMouseStoneKey).flatMap(AirMouseStone.init(rawValue:)))
         var generator = SystemRandomNumberGenerator()
         func unit() -> Double { Double.random(in: 0..<1, using: &generator) }

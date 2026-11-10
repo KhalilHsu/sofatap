@@ -119,7 +119,9 @@ struct AirMouseView: View {
 
     private var pebble: some View {
         let choice = model.airMouseAppearance
-        let longEdge: CGFloat = Kare.isSmallScreen ? 240 : 300
+        // Re-exported pebbles carry a 4% transparent margin (stone = 92% of the
+        // image width), so a 326/260pt image keeps the stone itself at 300/240pt.
+        let longEdge: CGFloat = Kare.isSmallScreen ? 260 : 326
         let lit = model.airMoving
         let motion = reduceMotion ? Animation.easeOut(duration: 0.1) : (lit ? .easeOut(duration: 0.14) : .easeOut(duration: 0.2))
         return TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { timeline in
