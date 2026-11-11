@@ -276,3 +276,39 @@ struct KareSheetRow<Trailing: View>: View {
         .contentShape(Rectangle())
     }
 }
+
+/// Delivery hint under the composer: the message wraps to at most two lines and
+/// truncates with an ellipsis; the accent text actions stay one line at full size.
+struct DeliveryNoticeRow: View {
+    struct Action { let title: String; let identifier: String; let run: () -> Void }
+    let message: String
+    let font: Font
+    let actions: [Action]
+    var disabled = false
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 14) {
+            Text(message)
+                .font(font)
+                .foregroundStyle(Kare.mute)
+                .lineLimit(2)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("textDeliveryStatus")
+            ForEach(actions, id: \.identifier) { action in
+                Button(action.title, action: action.run)
+                    .font(font.weight(.semibold))
+                    .lineLimit(1)
+                    .fixedSize()
+                    .layoutPriority(1)
+                    .foregroundStyle(Kare.accent)
+                    .buttonStyle(.plain)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                    .disabled(disabled)
+                    .accessibilityIdentifier(action.identifier)
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.top, 8)
+    }
+}

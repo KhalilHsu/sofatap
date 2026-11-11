@@ -1050,26 +1050,9 @@ struct RemoteView: View {
     @ViewBuilder
     private var composerNotice: some View {
         if let message = composerMessage {
-            HStack(alignment: .firstTextBaseline, spacing: 14) {
-                Text(message)
-                    .font(deliveryHintFont)
-                    .foregroundStyle(Kare.mute)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityIdentifier("textDeliveryStatus")
-                ForEach(deliveryActions, id: \.identifier) { action in
-                    Button(action.title, action: action.run)
-                        .font(deliveryHintFont.weight(.semibold))
-                        .foregroundStyle(Kare.accent)
-                        .buttonStyle(.plain)
-                        .frame(minHeight: 44)
-                        .contentShape(Rectangle())
-                        .disabled(model.sendingText || speechBusy)
-                        .accessibilityIdentifier(action.identifier)
-                }
-            }
-            .padding(.horizontal, 6)
-            .padding(.top, 8)
+            DeliveryNoticeRow(message: message, font: deliveryHintFont,
+                              actions: deliveryActions.map { DeliveryNoticeRow.Action(title: $0.title, identifier: $0.identifier, run: $0.run) },
+                              disabled: model.sendingText || speechBusy)
         }
     }
 

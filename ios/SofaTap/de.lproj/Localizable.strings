@@ -545,8 +545,8 @@
 "按住石子挥动手机，光标大幅移动；按住时单指在石子上滑动，光标精细移动。双指上下滑动滚动页面。轻点单击，轻点两下双击，按住不动右键，轻点后按住拖动。" = "Stein halten und das Telefon schwenken für große Zeigerbewegungen; beim Halten mit einem Finger über den Stein gleiten für feine Bewegungen. Mit zwei Fingern nach oben oder unten wischen zum Scrollen. Tippen zum Klicken, zweimal tippen für Doppelklick, still halten für Rechtsklick, tippen und dann halten zum Ziehen.";
 /* Explicit text delivery hints. */
 "没有送到电脑" = "Nicht beim Computer angekommen";
-"电脑上没有可输入的位置，请先点一下输入框" = "Auf dem Computer ist kein Eingabefeld aktiv. Klicke zuerst in ein Textfeld";
+"电脑上没有可输入的位置，请先点一下输入框" = "Kein Textfeld aktiv. Klicke zuerst in ein Textfeld";
 "连接断了一下，不确定电脑收到没有" = "Die Verbindung war kurz weg. Unklar, ob der Computer es erhalten hat";
-"重试" = "Erneut versuchen";
-"已上屏" = "Ist angekommen";
-"再发一次" = "Erneut senden";
+"重试" = "Nochmal";
+"已上屏" = "Ist da";
+"再发一次" = "Neu senden";

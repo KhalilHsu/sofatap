@@ -546,7 +546,7 @@
 /* Explicit text delivery hints. */
 "没有送到电脑" = "Le texte n'est pas arrivé sur l'ordinateur";
 "电脑上没有可输入的位置，请先点一下输入框" = "Aucun champ de saisie sur l'ordinateur. Cliquez d'abord dans un champ de texte";
-"连接断了一下，不确定电脑收到没有" = "La connexion a été coupée un instant. Impossible de savoir si l'ordinateur l'a reçu";
+"连接断了一下，不确定电脑收到没有" = "Connexion coupée un instant. L'ordinateur l'a peut-être reçu";
 "重试" = "Réessayer";
-"已上屏" = "C'est affiché";
+"已上屏" = "Affiché";
 "再发一次" = "Renvoyer";

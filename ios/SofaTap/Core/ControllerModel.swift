@@ -331,6 +331,17 @@ final class ControllerModel: ObservableObject {
         if demo {
             notice = String(localized: "界面演示：按钮只展示反馈，没有连接或操作电脑。")
 #if targetEnvironment(simulator)
+            // Screenshot fixture: `--demo-delivery rejected|noFocus|uncertain`.
+            let demoArguments = ProcessInfo.processInfo.arguments
+            if let index = demoArguments.firstIndex(of: "--demo-delivery"), index + 1 < demoArguments.count {
+                draft = String(localized: "你好，帮我播放今晚想看的电影。")
+                switch demoArguments[index + 1] {
+                case "noFocus": textDelivery = .noFocus
+                case "uncertain": textDelivery = .uncertain
+                default: textDelivery = .rejected("input_unavailable")
+                }
+                notice = ""
+            }
             if ProcessInfo.processInfo.arguments.contains("--demo-devices") {
                 var library = DeviceLibrary<Pairing>()
                 let fixtures = ProcessInfo.processInfo.arguments.contains("--demo-devices-zh")
