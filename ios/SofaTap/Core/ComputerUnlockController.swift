@@ -124,7 +124,7 @@ final class ComputerUnlockController: ObservableObject {
                 }
                 self.state = .waiting
                 for _ in 0..<20 {
-                    try await Task.sleep(for: .seconds(1))
+                    try await SofaClock.sleep(seconds: 1)
                     guard self.generation == current, self.foreground else { throw CancellationError() }
                     let reply = try await self.request("GET", path: "/v1/attempt/\(challenge.attemptID)", pairing: pairing, capability: capability)
                     guard capability.validates(reply), reply["attemptId"] as? String == challenge.attemptID,

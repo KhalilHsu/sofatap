@@ -10,7 +10,10 @@ enum DesktopConnectionMode: String {
 }
 
 enum TextDelivery: Equatable {
-    case ready, sending, sent, rejected(String), uncertain
+    /// `rejected`: definitely not typed (not connected, never left the phone, or an
+    /// explicit refusal before any event). `noFocus`: the computer had no editable
+    /// field, nothing was typed. `uncertain`: it may have been typed.
+    case ready, sending, sent, rejected(String), noFocus, uncertain
 }
 
 private enum CommandResult {
@@ -32,6 +35,18 @@ final class ControllerModel: ObservableObject {
     @Published private(set) var computerName = String(localized: "客厅电脑")
     @Published var notice = String(localized: "配对一次，坐下来就能控制电脑。")
     @Published var pairingError: String?
+    /// The receiver explicitly refused this pairing (pinned certificate changed or
+    /// token rejected). Ordinary network loss never sets this; it keeps reconnecting.
+    @Published private(set) var repairNeededFor: UUID?
+    @Published private(set) var demoRepair = false
+    var needsRepairing: Bool {
+        desktopControlEnabled && (demoRepair || (repairNeededFor != nil && repairNeededFor == selectedDeviceID))
+    }
+    /// Only an explicit credential refusal means "pair again"; TLS errors such as
+    /// an expired certificate keep their diagnostic message.
+    nonisolated static func credentialsRejected(diagnostic: String?, status: Int?) -> Bool {
+        diagnostic == "TLS_PIN" || status == 401
+    }
     private var draftDefaults: UserDefaults? = .standard
     @Published var draft: String {
         didSet {
@@ -61,6 +76,16 @@ final class ControllerModel: ObservableObject {
     }
     @Published private(set) var dragging = false
     @Published private(set) var airMoving = false
+    @Published private(set) var airMouseSweepDegrees = AirMouseGain.defaultSweepDegrees
+    @Published private(set) var airMousePitch = 0.0
+    @Published private(set) var airMouseRoll = 0.0
+    /// Card gesture counters for the page hint; they restart with each session.
+    @Published private(set) var airMouseTwoFingerScrolls = 0
+    @Published private(set) var airMouseVerticalSlides = 0
+    @Published private(set) var airMouseAppearance = AirMouseStoneChoice(stone: AirMouseStones.defaultStone, rotationDegrees: 0, mirrored: false, scale: 1)
+    @Published private(set) var selectedRemoteDisplayID: String?
+    /// Shown when a connected receiver did not advertise display centering.
+    static let recenterUnsupportedNotice = "当前接收端不支持自动回中"
     @Published private(set) var sensitivity = 1.0
     @Published private(set) var volumeBusy = false
     @Published private(set) var volumeFeedback: String?
@@ -128,6 +153,8 @@ final class ControllerModel: ObservableObject {
         let reconnect = connected || connecting || reconnectID != nil
         connectionMode = mode
         if !demo { connectionDefaults?.set(mode.rawValue, forKey: Self.connectionModeKey) }
+        // An explicit route choice re-evaluates the route from scratch.
+        forgetLearnedRoute()
         // A route change ends the gesture/session; no pending input crosses routes.
         disconnect()
         if reconnect && !demo { connect() }
@@ -136,6 +163,19 @@ final class ControllerModel: ObservableObject {
     var usesPeerTransport: Bool { connected && peerConnectionAttempt }
     private var peerConnectionAttempt = false
     private var preferLANForNextAttempt = false
+    /// Route learning for automatic mode. The peer-to-peer (AWDL) route measured
+    /// ~570 ms smoothed RTT with >10 s stalls on an iPhone 7 while the same Mac's
+    /// LAN path was 4 ms, so a pairing whose LAN path has worked goes LAN first,
+    /// and a peer route that failed is not retried until the user reconnects.
+    private var peerRouteFailed: String?
+    private var lanRouteFailed: String?
+    private static func lanRouteKey(_ pairing: Pairing) -> String { "sofatap.lanRouteVerified." + pairing.fingerprint.lowercased() }
+    private func lanRouteVerified(_ pairing: Pairing) -> Bool { connectionDefaults?.bool(forKey: Self.lanRouteKey(pairing)) == true || lanVerifiedInSession == pairing.fingerprint }
+    private var lanVerifiedInSession: String?
+    private func forgetLearnedRoute() {
+        peerRouteFailed = nil; lanRouteFailed = nil; lanVerifiedInSession = nil
+        if let pairing { connectionDefaults?.removeObject(forKey: Self.lanRouteKey(pairing)) }
+    }
     private var routePreparation: Task<Void, Never>?
     private var peerDiscovery: PeerTransportDiscovery?
     private var peerBridge: PeerTLSBridge?
@@ -168,10 +208,24 @@ final class ControllerModel: ObservableObject {
     private var queuedMovementStart = -Double.infinity
     private var lastScroll = Date.distantPast
     private let motion = CMMotionManager()
+    private var shakeDetector = AirMouseShakeDetector()
+    private var airFingerUpTime = -Double.infinity
+    static let airMouseSweepKey = "sofatap.airMouse.sweepDegrees"
+    static let airMouseShakeRecenterKey = "sofatap.airMouse.shakeRecenter"
+    private var airTracker = AirMouseTracker()
+    private var cardGesture = AirMouseCardGesture()
+    private let lastAirMouseStoneKey = "sofatap.airMouse.lastStone"
+    private var airSession = false
+    private var airGeneration = UUID()
+    private var latestAirSample: AirMouseSample?
+    private var announcedMissingDisplayCenter = false
     private struct Pending {
         let type: String
         let timer: Task<Void, Never>
         let completion: ((CommandResult) -> Void)?
+        /// URLSession reported the frame as written. Until then a timeout means
+        /// the frame never left this phone.
+        var outbound = false
     }
     private var pending: [String: Pending] = [:]
 #if SOFATAP_CONTROLLER_TESTING
@@ -185,6 +239,8 @@ final class ControllerModel: ObservableObject {
     private var testScheduleReconnect: ((TimeInterval, @escaping () -> Void) -> Void)?
     private var testPeerAvailabilityMonitor: ((@escaping (Bool) -> Void) -> Void)?
     private var testWireSend: ((String) -> Void)?
+    /// Recording wire only: hold frames as if still queued on this phone.
+    var testWireHoldsFrames = false
     init(testPairingLibrary: DeviceLibrary<Pairing>,
          testPairingWrite: @escaping (Pairing) throws -> DeviceLibrary<Pairing>,
          testPairingConnect: @escaping (Pairing) -> Void,
@@ -213,6 +269,10 @@ final class ControllerModel: ObservableObject {
         }
     }
     var testConnectionGeneration: UUID { generation }
+    /// Same path as a real WebSocket receive failure.
+    func testTransportError(_ error: Error = URLError(.cancelled), diagnostic: String?, status: Int?) {
+        transportError(error, diagnostic: diagnostic, status: status, closeCode: .invalid, generation: generation)
+    }
     func testTransportFailure(retryable: Bool = true, generation: UUID? = nil) {
         transportFailed(message: "test transport failure", retryable: retryable, generation: generation ?? self.generation)
     }
@@ -287,9 +347,24 @@ final class ControllerModel: ObservableObject {
         if demo {
             notice = String(localized: "界面演示：按钮只展示反馈，没有连接或操作电脑。")
 #if targetEnvironment(simulator)
+            // Screenshot fixture: `--demo-delivery rejected|noFocus|uncertain`.
+            let demoArguments = ProcessInfo.processInfo.arguments
+            if let index = demoArguments.firstIndex(of: "--demo-delivery"), index + 1 < demoArguments.count {
+                draft = String(localized: "你好，帮我播放今晚想看的电影。")
+                switch demoArguments[index + 1] {
+                case "noFocus": textDelivery = .noFocus
+                case "uncertain": textDelivery = .uncertain
+                default: textDelivery = .rejected("input_unavailable")
+                }
+                notice = ""
+            }
+            demoRepair = demoArguments.contains("--demo-repair")
             if ProcessInfo.processInfo.arguments.contains("--demo-devices") {
                 var library = DeviceLibrary<Pairing>()
-                for (index, title, platform) in [(1, "Living room PC", "windows"), (2, "Studio Mac", "macos"), (3, "Cinema Linux", "linux")] {
+                let fixtures = ProcessInfo.processInfo.arguments.contains("--demo-devices-zh")
+                    ? [(1, "客厅 Mac mini", "macos"), (2, "书房 MacBook Air", "macos")]
+                    : [(1, "Living room PC", "windows"), (2, "Studio Mac", "macos"), (3, "Cinema Linux", "linux")]
+                for (index, title, platform) in fixtures {
                     let credential = Pairing(host: "192.0.2.\(index)", port: 53317,
                                              token: String(repeating: "d", count: 43), fingerprint: String(repeating: String(index), count: 64))
                     library.upsert(credential)
@@ -298,6 +373,10 @@ final class ControllerModel: ObservableObject {
                 savedDevices = library.devices
                 selectedDeviceID = library.devices.first?.id
                 computerName = library.devices.first?.displayName ?? computerName
+                // The demo has no receiver, so supply one main display; the
+                // sheet's TV screen and recenter rows then show their real state.
+                receiverState.displays = [RemoteDisplay(id: "demo-main", width: 3840, height: 2160, scale: 2, isMain: true)]
+                selectedRemoteDisplayID = "demo-main"
             }
 #endif
         }
@@ -501,9 +580,10 @@ final class ControllerModel: ObservableObject {
             if lastSentDraft != nil { return String(localized: "确认后只发送新增的文字。") }
             return liveTextStatus == .unsupported ? liveTextDescription : String(localized: "先点电脑里的输入框，再发送整段文字。")
         case .sending: return String(localized: "等待电脑确认… 请勿重复发送。")
-        case .sent: return String(localized: "已向电脑系统提交文字；请在屏幕上确认内容。")
-        case .rejected(let error): return String(localized: "未被电脑接受：\(error)")
-        case .uncertain: return String(localized: "发送结果不完整或未确认，文字可能已输入。请先查看电脑屏幕，避免重复。")
+        case .sent: return ""
+        case .rejected: return String(localized: "没有送到电脑")
+        case .noFocus: return String(localized: "电脑上没有可输入的位置，请先点一下输入框")
+        case .uncertain: return String(localized: "连接断了一下，不确定电脑收到没有")
         }
     }
 
@@ -533,6 +613,7 @@ final class ControllerModel: ObservableObject {
             computerName = savedDevices.first { $0.id == selectedDeviceID }?.reportedName ?? newPairing.deviceAddress
             updateUnlockPairing(newPairing)
             pairingError = nil
+            repairNeededFor = nil
             connect()
         } catch {
             pairingError = error.localizedDescription
@@ -613,6 +694,8 @@ final class ControllerModel: ObservableObject {
 
     func connect() {
         manualConnectionPaused = false
+        // A manual reconnect may try the peer route again.
+        peerRouteFailed = nil; lanRouteFailed = nil
         automaticReconnectBlocked = false
         cancelReconnect()
         startConnection()
@@ -639,7 +722,11 @@ final class ControllerModel: ObservableObject {
         inputAvailable = false
         receiverState = ReceiverState()
         notice = String(localized: "正在验证电脑证书与配对凭据…")
-        let skipPeer = connectionMode == .wifi || preferLANForNextAttempt
+        let fingerprint = pairing.fingerprint
+        let skipPeer: Bool
+        if connectionMode == .wifi || preferLANForNextAttempt { skipPeer = true }
+        else if lanRouteFailed == fingerprint { skipPeer = false }
+        else { skipPeer = peerRouteFailed == fingerprint || lanRouteVerified(pairing) }
         preferLANForNextAttempt = false
 #if SOFATAP_CONTROLLER_TESTING
         if !skipPeer, let testPrepareConnection {
@@ -713,7 +800,7 @@ final class ControllerModel: ObservableObject {
         task.resume()
         receiveNext(task, generation: currentGeneration)
         helloTimeout = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(10))
+            try? await SofaClock.sleep(seconds: 10)
             guard !Task.isCancelled, let self, self.generation == currentGeneration, !self.connected else { return }
             let retryable = Self.mayRetryTransport(URLError(.timedOut), diagnostic: self.sessionDelegate?.rejectionReason,
                                                   status: (task.response as? HTTPURLResponse)?.statusCode)
@@ -748,7 +835,7 @@ final class ControllerModel: ObservableObject {
         if let testScheduleReconnect { testScheduleReconnect(delay, retry); return }
 #endif
         reconnectTask = Task {
-            do { try await Task.sleep(for: .seconds(delay)) }
+            do { try await SofaClock.sleep(seconds: delay) }
             catch { return }
             retry()
         }
@@ -761,6 +848,14 @@ final class ControllerModel: ObservableObject {
         // A failed peer route should not delay recovery by rediscovering the same
         // unavailable path, even when it previously completed authentication.
         let retryWithLAN = retryable && peerConnectionAttempt
+        if let fingerprint = pairing?.fingerprint, connectionMode == .automatic {
+            if peerConnectionAttempt { peerRouteFailed = fingerprint; lanRouteFailed = nil }
+            else if connecting && lanRouteFailed != fingerprint {
+                // LAN never reached hello: let the next automatic attempt use peer.
+                lanRouteFailed = fingerprint
+                if peerRouteFailed == fingerprint { peerRouteFailed = nil }
+            }
+        }
         disconnect(message: message, preservingRetryAttempt: true)
         preferLANForNextAttempt = retryWithLAN
         if retryable { scheduleReconnect() }
@@ -854,17 +949,9 @@ final class ControllerModel: ObservableObject {
 #endif
                 switch result {
                 case .failure(let error):
-                    let diagnostic = self.sessionDelegate?.rejectionReason
-                    let failureMessage = diagnostic.map { reason in
-                        reason == "TLS_VERIFY_-67901"
-                        ? String(localized: "电脑证书有效期超出 iOS 限制（\(reason)）。请更新电脑接收器并重新配对。")
-                        : String(localized: "电脑证书校验失败（\(reason)）。请检查电脑接收器的证书并重新配对。")
-                    }
-                    let retryable = Self.mayRetryTransport(error, diagnostic: diagnostic,
-                                                          status: (task.response as? HTTPURLResponse)?.statusCode,
-                                                          closeCode: task.closeCode, authenticated: self.connected)
-                    self.transportFailed(message: failureMessage ?? String(localized: "连接中断。请检查接收器；未确认的文字不会自动重发。"),
-                                         retryable: retryable, generation: currentGeneration)
+                    self.transportError(error, diagnostic: self.sessionDelegate?.rejectionReason,
+                                        status: (task.response as? HTTPURLResponse)?.statusCode,
+                                        closeCode: task.closeCode, generation: currentGeneration)
                 case .success(let message):
                     let data: Data?
                     switch message {
@@ -885,6 +972,28 @@ final class ControllerModel: ObservableObject {
         }
     }
 
+    private func transportError(_ error: Error, diagnostic: String?, status: Int?,
+                                closeCode: URLSessionWebSocketTask.CloseCode, generation currentGeneration: UUID) {
+        guard generation == currentGeneration else { return }
+        if Self.credentialsRejected(diagnostic: diagnostic, status: status) {
+            // The receiver is reachable but no longer accepts this pairing:
+            // stop retrying and offer the scan instead of an endless spinner.
+            let device = selectedDeviceID
+            transportFailed(message: String(localized: "需要重新配对"), retryable: false, generation: currentGeneration)
+            repairNeededFor = device
+            return
+        }
+        let failureMessage = diagnostic.map { reason in
+            reason == "TLS_VERIFY_-67901"
+            ? String(localized: "电脑证书有效期超出 iOS 限制（\(reason)）。请更新电脑接收器并重新配对。")
+            : String(localized: "电脑证书校验失败（\(reason)）。请检查电脑接收器的证书并重新配对。")
+        }
+        let retryable = Self.mayRetryTransport(error, diagnostic: diagnostic, status: status,
+                                              closeCode: closeCode, authenticated: connected)
+        transportFailed(message: failureMessage ?? String(localized: "连接中断。请检查接收器；未确认的文字不会自动重发。"),
+                        retryable: retryable, generation: currentGeneration)
+    }
+
     private func handle(_ message: [String: Any]) -> Bool {
         switch message["type"] as? String {
         case "hello":
@@ -896,8 +1005,13 @@ final class ControllerModel: ObservableObject {
             helloTimeout = nil
             connecting = false
             connected = true
+            if !peerConnectionAttempt, let pairing {
+                lanRouteFailed = nil; lanVerifiedInSession = pairing.fingerprint
+                connectionDefaults?.set(true, forKey: Self.lanRouteKey(pairing))
+            }
             cancelReconnect()
             automaticReconnectBlocked = false
+            repairNeededFor = nil
             receiverState = state
             inputAvailable = state.inputAvailable
             computerName = name
@@ -907,6 +1021,8 @@ final class ControllerModel: ObservableObject {
             // The retired account-password capability is deliberately ignored.
             // Windows Hello PIN support requires a separate verified protocol.
             notice = state.inputAvailable ? String(localized: "已连接。先点选电脑上的输入框，即可发送文字。") : state.unavailableMessage
+            noteDisplays()
+            if airSession { pickAirMouseStone() }
             startTimers()
             return true
         case "ack":
@@ -928,15 +1044,20 @@ final class ControllerModel: ObservableObject {
                 // stays bounded and never includes server-controlled suffixes or drafts.
                 let rawCode = (message["error"] as? String)?.split(separator: ":", maxSplits: 1).first.map(String.init)
                 let code = rawCode.flatMap { value -> String? in
-                    let allowed = ["input_busy", "input_unavailable", "invalid_frame", "input_failed", "unsupported_key", "too_large", "invalid_message", "rate_limited", "live_text_unsupported", "live_text_conflict", "live_text_changed", "live_text_uncertain", "live_text_invalid"]
+                    let allowed = ["input_busy", "input_no_focus", "input_unavailable", "invalid_frame", "input_failed", "unsupported_key", "too_large", "invalid_message", "rate_limited", "live_text_unsupported", "live_text_conflict", "live_text_changed", "live_text_uncertain", "live_text_invalid"]
                     return allowed.contains(value) ? value : nil
                 } ?? "unknown_error"
                 // A failed injection can have typed a prefix. Unknown errors are conservative.
                 let definitelyRejected = ["input_unavailable", "invalid_frame", "input_failed", "unsupported_key", "too_large", "invalid_message", "rate_limited", "live_text_unsupported", "live_text_conflict", "live_text_changed", "live_text_uncertain", "live_text_invalid"].contains(rawCode ?? "")
                 if item.type == "volume" && ["volume_unknown", "input_unknown", "input_partial"].contains(rawCode ?? "") {
                     item.completion?(.uncertain)
+                } else if item.type == "text" && rawCode == "input_no_focus" {
+                    item.completion?(.rejected("input_no_focus"))
+                } else if item.type == "text" && rawCode == "input_busy" {
+                    // input_busy is raised before any event is attempted.
+                    item.completion?(.rejected("input_busy"))
                 } else if item.type == "text" && !definitelyRejected {
-                    notice = String(localized: "电脑未完整确认操作，文字可能已经部分输入。请先查看电脑屏幕。")
+                    // The inline delivery hint explains this; no second banner.
                     item.completion?(.uncertain)
                 } else {
                     let displayCode = code == "unknown_error" ? String(localized: "操作未完成") : code
@@ -955,7 +1076,10 @@ final class ControllerModel: ObservableObject {
 #endif
         let currentGeneration = generation
         let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.flushMovement() }
+            Task { @MainActor in
+                self?.flushMovement()
+                self?.tickAirMouseCard()
+            }
         }
         motionTimer = timer
         RunLoop.main.add(timer, forMode: .common)
@@ -963,7 +1087,7 @@ final class ControllerModel: ObservableObject {
             while !Task.isCancelled {
                 // New receivers report only an editable-state hint, never field contents.
                 let interval = self?.receiverState.reportsTextFocus == true ? 0.75 : 5.0
-                try? await Task.sleep(for: .seconds(interval))
+                try? await SofaClock.sleep(seconds: interval)
                 guard !Task.isCancelled, let self, self.generation == currentGeneration, self.foreground else { return }
                 guard !self.pending.values.contains(where: { $0.type == "ping" }) else { continue }
                 self.send("ping", fields: [:], timeout: 8) { result in
@@ -1010,17 +1134,27 @@ final class ControllerModel: ObservableObject {
         }
         let currentGeneration = generation
         let timer = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(timeout))
+            try? await SofaClock.sleep(seconds: timeout)
             guard !Task.isCancelled else { return }
             self?.commandTimedOut(id: id, generation: currentGeneration)
         }
         pending[id] = Pending(type: type, timer: timer, completion: completion)
-        if let recordingWire { recordingWire(text); return }
+        if let recordingWire {
+#if SOFATAP_CONTROLLER_TESTING
+            if testWireHoldsFrames { return }
+#endif
+            pending[id]?.outbound = true; recordingWire(text); return
+        }
         guard let socket else { return }
         socket.send(.string(text)) { [weak self] error in
-            guard let error else { return }
             Task { @MainActor in
                 guard let self, self.generation == currentGeneration else { return }
+                guard let error else { self.pending[id]?.outbound = true; return }
+                // The frame was not written, so it cannot have been typed.
+                if self.pending[id]?.type == "text", let item = self.pending.removeValue(forKey: id) {
+                    item.timer.cancel()
+                    item.completion?(.rejected("send_failed"))
+                }
                 let retryable = Self.mayRetryTransport(error, diagnostic: self.sessionDelegate?.rejectionReason,
                                                       status: (socket.response as? HTTPURLResponse)?.statusCode,
                                                       closeCode: socket.closeCode, authenticated: self.connected)
@@ -1032,6 +1166,10 @@ final class ControllerModel: ObservableObject {
 
     private func commandTimedOut(id: String, generation currentGeneration: UUID) {
         guard generation == currentGeneration, pending[id] != nil else { return }
+        if pending[id]?.type == "text", pending[id]?.outbound == false, let item = pending.removeValue(forKey: id) {
+            // Still queued on this phone: definitely not typed.
+            item.completion?(.rejected("send_timeout"))
+        }
         // Keep the timed-out item in pending. Disconnect first invalidates the
         // generation and removes all pending items, then completes each once as
         // uncertain. A drag completion cannot recursively disconnect and cancel
@@ -1048,17 +1186,19 @@ final class ControllerModel: ObservableObject {
         flushMovement()
     }
 
-    func move(dx: Double, dy: Double) {
+    func move(dx: Double, dy: Double, gain: Double? = nil) {
         guard canControl, dx.isFinite, dy.isFinite else { return }
         if demo { return }
+        let scale = gain ?? sensitivity
+        guard scale.isFinite else { return }
         // Relative distances must accumulate even while earlier packets await ACK.
         // Bound the age of the entire unsent batch, not just its newest sample.
         let now = movementTime
         if now - queuedMovementStart > Self.movementLifetime || abs(queuedDX) + abs(queuedDY) <= 0.01 {
             queuedDX = 0; queuedDY = 0; queuedMovementStart = now
         }
-        queuedDX = max(-500, min(500, queuedDX + dx * sensitivity))
-        queuedDY = max(-500, min(500, queuedDY + dy * sensitivity))
+        queuedDX = max(-500, min(500, queuedDX + dx * scale))
+        queuedDY = max(-500, min(500, queuedDY + dy * scale))
     }
 
     func scroll(dy: Double) {
@@ -1136,19 +1276,19 @@ final class ControllerModel: ObservableObject {
         }
     }
 
-    func click(_ button: String) {
+    func click(_ button: String, playFeedback: Bool = true) {
         guard canControl else { return }
         endLiveTextEditing()
-        feedback()
+        if playFeedback { feedback() }
         if demo { notice = button == "left" ? String(localized: "演示：左键单击。") : String(localized: "演示：右键单击。"); return }
         send("click", fields: ["button": button])
     }
 
-    func setDragging(_ down: Bool) {
+    func setDragging(_ down: Bool, playFeedback: Bool = true) {
         guard down != dragging, !down || canControl else { return }
         if down { endLiveTextEditing() }
         dragging = down
-        feedback()
+        if playFeedback { feedback() }
         if demo { notice = down ? String(localized: "演示：按住拖拽，再用触控板移动。") : String(localized: "演示：已松开拖拽。"); return }
         if !down {
             // Freeze this gesture's tail before the next run-loop tick or UI
@@ -1269,17 +1409,56 @@ final class ControllerModel: ObservableObject {
         let attempt = UUID()
         explicitSendAttempt = attempt
         textDelivery = .sending
-        send("text", fields: ["text": payload]) { [weak self] result in
+        var fields: [String: Any] = ["text": payload]
+        if receiverState.supportsNoFocusCheck { fields["requireFocus"] = true }
+        send("text", fields: fields) { [weak self] result in
             guard let self, self.explicitSendAttempt == attempt else { return }
             self.explicitSendAttempt = nil
             switch result {
             case .accepted:
                 self.lastSentDraft = snapshot
                 self.textDelivery = self.explicitTextToSend == "" ? .sent : .ready
+                self.deliveryFeedback()
+            case .rejected("input_no_focus"): self.textDelivery = .noFocus
             case .rejected(let error): self.textDelivery = .rejected(error)
             case .uncertain: self.textDelivery = .uncertain
             }
         }
+    }
+
+    /// 「重试」/「再发一次」: send exactly the same unsent text again. Used after a
+    /// definite failure, a missing focus, or when the user chooses to resend an
+    /// uncertain delivery after checking the computer.
+    func retryTextDelivery() {
+        guard !sendingText, !usesLiveText else { return }
+        switch textDelivery {
+        case .rejected, .noFocus, .uncertain: textDelivery = .ready
+        default: break
+        }
+        sendText()
+    }
+
+    /// The app's own dictation ended. Its partial results stayed on the phone;
+    /// publish the final draft exactly once (live sync) or unlock Send.
+    func finishDictation() {
+        if liveTextReady {
+            editText(draft, selection: draftSelection, marked: false)
+        } else {
+            composing = false
+        }
+    }
+
+    /// 「已上屏」: the user saw the text on the computer. Clear the draft and unlock.
+    func confirmTextDelivered() {
+        guard textDelivery == .uncertain, !sendingText else { return }
+        clearDraft()
+    }
+
+    private func deliveryFeedback() {
+#if SOFATAP_CONTROLLER_TESTING
+        if testSend != nil || testLiveSend != nil || testPairingConnect != nil || testWireSend != nil { return }
+#endif
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
     func allowManualResend() {
@@ -1440,36 +1619,272 @@ final class ControllerModel: ObservableObject {
             }
         }
         receiverState = state; inputAvailable = state.inputAvailable
+        noteDisplays()
     }
 
-    func startAirMouse() {
-        guard canControl, foreground, !airMoving else { return }
-        if demo { airMoving = true; feedback(); return }
-        guard motion.isDeviceMotionAvailable else { notice = String(localized: "这台设备没有可用的陀螺仪，请使用触控板。"); return }
+    var airMouseCanRecenter: Bool {
+        canControl && receiverState.supportsDisplayCentering && selectedRemoteDisplayID != nil
+    }
+
+    /// Temporary gyro screen. Motion is sampled only while it is open; the
+    /// pointer moves only during a finger hold.
+    func startAirMouseSession() {
+        guard foreground, !airSession else { return }
+        airSession = true
+        airTracker = AirMouseTracker()
+        cardGesture = AirMouseCardGesture()
+        shakeDetector.reset()
+        if let stored = UserDefaults.standard.object(forKey: Self.airMouseSweepKey) as? Double {
+            airMouseSweepDegrees = AirMouseGain.clampSweep(stored)
+        }
+        syncAirMouseMapping()
+        pickAirMouseStone()
+        noteDisplays()
+        beginAirMotionUpdates()
+    }
+
+    func setAirMouseCard(flickRightClick: Bool, rightHold: Double) {
+        cardGesture.config.flickRightClickEnabled = flickRightClick
+        cardGesture.config.rightHold = min(0.8, max(0.5, rightHold.isFinite ? rightHold : 0.6))
+    }
+
+    func airMouseFingerDown(x: Double, y: Double) {
+        guard airSession, foreground, !airMoving else { return }
         airMoving = true
-        feedback()
+        cardGesture.config.pointerSpeed = sensitivity
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        applyCardActions(cardGesture.touchDown(at: .init(x: x, y: y), time: movementTime, pitch: airTracker.pitch, yaw: airTracker.yaw))
+    }
+
+    func airMouseFingerMove(x: Double, y: Double) {
+        guard airSession, airMoving else { return }
+        applyCardActions(cardGesture.touchMove(to: .init(x: x, y: y), time: movementTime))
+    }
+
+    func airMouseFingerUp() {
+        guard airMoving else { return }
+        airMoving = false
+        airFingerUpTime = ProcessInfo.processInfo.systemUptime
+        queuedDX = 0
+        queuedDY = 0
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        applyCardActions(cardGesture.touchUp(time: movementTime))
+    }
+
+    /// A second finger joined (or two landed together): the card scrolls instead.
+    func airMouseTwoFingerBegan(x: Double, y: Double) {
+        guard airSession else { return }
+        airMoving = false
+        airFingerUpTime = ProcessInfo.processInfo.systemUptime
+        queuedDX = 0
+        queuedDY = 0
+        applyCardActions(cardGesture.twoFingerBegan(centroid: .init(x: x, y: y), time: movementTime))
+    }
+
+    func airMouseTwoFingerMoved(x: Double, y: Double, rebase: Bool) {
+        guard airSession else { return }
+        applyCardActions(cardGesture.twoFingerMoved(centroid: .init(x: x, y: y), rebase: rebase))
+    }
+
+    func airMouseTwoFingerEnded() {
+        airFingerUpTime = ProcessInfo.processInfo.systemUptime
+        applyCardActions(cardGesture.allFingersUp(time: movementTime))
+    }
+
+    /// UIKit cancelled the touches. A held drag is released; nothing clicks.
+    func airMouseCancelTouches() {
+        airMoving = false
+        queuedDX = 0
+        queuedDY = 0
+        applyCardActions(cardGesture.cancel())
+    }
+
+    func setAirMouseSweepDegrees(_ value: Double) {
+        airMouseSweepDegrees = AirMouseGain.clampSweep(value)
+        UserDefaults.standard.set(airMouseSweepDegrees, forKey: Self.airMouseSweepKey)
+        syncAirMouseMapping()
+    }
+
+    func selectRemoteDisplay(_ id: String) {
+        guard receiverState.displays.contains(where: { $0.id == id }) else { return }
+        guard id != selectedRemoteDisplayID else { return }
+        selectedRemoteDisplayID = id
+        syncAirMouseMapping()
+        guard canControl, receiverState.supportsDisplayCentering else { return }
+        send("selectDisplay", fields: ["display": id])
+    }
+
+    func recenterAirMouse() {
+        guard airMouseCanRecenter, let id = selectedRemoteDisplayID else {
+            if connected && !receiverState.supportsDisplayCentering {
+                notice = Self.recenterUnsupportedNotice
+                announcedMissingDisplayCenter = true
+            }
+            return
+        }
+        airTracker.rebase()
+        queuedDX = 0; queuedDY = 0
+        send("center", fields: ["display": id])
+    }
+
+    func stopAirMouse() {
+        airGeneration = UUID()
+        motion.stopDeviceMotionUpdates()
+        applyCardActions(cardGesture.cancel())
+        airMoving = false
+        airSession = false
+        latestAirSample = nil
+        announcedMissingDisplayCenter = false
+        airMousePitch = 0
+        airMouseRoll = 0
+        queuedDX = 0; queuedDY = 0
+    }
+
+    private var airMouseLogicalWidth: Double {
+        guard let id = selectedRemoteDisplayID,
+              let display = receiverState.displays.first(where: { $0.id == id }) else { return AirMouseGain.nominalLogicalWidth }
+        return Double(display.width)
+    }
+
+    private var airMouseLogicalHeight: Double {
+        guard let id = selectedRemoteDisplayID,
+              let display = receiverState.displays.first(where: { $0.id == id }) else { return AirMouseGain.nominalLogicalWidth }
+        return Double(display.height)
+    }
+
+    private func noteDisplays() {
+        selectedRemoteDisplayID = RemoteDisplay.keeping(selectedRemoteDisplayID, in: receiverState.displays)
+        syncAirMouseMapping()
+        if receiverState.supportsDisplayCentering { announcedMissingDisplayCenter = false }
+        else if airSession && connected && !announcedMissingDisplayCenter {
+            notice = Self.recenterUnsupportedNotice
+            announcedMissingDisplayCenter = true
+        }
+    }
+
+    private func beginAirMotionUpdates() {
+        guard !demo else { return }
+        guard motion.isDeviceMotionAvailable else {
+            notice = String(localized: "这台设备没有可用的陀螺仪，请使用触控板。")
+            return
+        }
+        let token = UUID()
+        airGeneration = token
         motion.deviceMotionUpdateInterval = 1.0 / 60.0
         motion.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: .main) { [weak self] data, error in
             Task { @MainActor in
-                guard let self, self.airMoving else { return }
+                guard let self, self.airGeneration == token, self.airSession else { return }
                 if error != nil {
                     self.stopAirMouse()
                     self.notice = String(localized: "无法读取陀螺仪，请检查运动权限或使用触控板。")
                     return
                 }
                 guard let data, ProcessInfo.processInfo.systemUptime - data.timestamp <= 0.15 else { return }
-                // Portrait, screen facing the user: y is left/right yaw, x is up/down pitch.
-                let yaw = abs(data.rotationRate.y) < 0.015 ? 0 : data.rotationRate.y
-                let pitch = abs(data.rotationRate.x) < 0.015 ? 0 : data.rotationRate.x
-                self.move(dx: -yaw * 18, dy: -pitch * 18)
+                let sample = AirMouseSample(
+                    time: data.timestamp,
+                    gravity: Vec3(x: data.gravity.x, y: data.gravity.y, z: data.gravity.z),
+                    rotationRate: Vec3(x: data.rotationRate.x, y: data.rotationRate.y, z: data.rotationRate.z))
+                self.latestAirSample = sample
+                _ = self.airTracker.ingest(sample)
+                self.airMousePitch = self.airTracker.pitch
+                self.airMouseRoll = self.airTracker.roll
+                self.detectRecenterShake(data)
+                guard self.airMoving, self.canControl else { return }
+                self.airTracker.setHolding(true)
+                self.airTracker.setFrozen(false)
+                let delta = self.airTracker.consume()
+                self.applyCardActions(self.cardGesture.pose(pitch: self.airTracker.pitch, yaw: self.airTracker.yaw,
+                                                            dx: delta.dx, dy: delta.dy, time: self.movementTime))
             }
         }
     }
 
-    func stopAirMouse() {
-        motion.stopDeviceMotionUpdates()
-        airMoving = false
-        queuedDX = 0; queuedDY = 0
+    /// A shake with no finger on the card recenters the pointer. Off in settings.
+    private func detectRecenterShake(_ data: CMDeviceMotion) {
+        let enabled = UserDefaults.standard.object(forKey: Self.airMouseShakeRecenterKey) as? Bool ?? true
+        guard enabled, !airMoving, data.timestamp - airFingerUpTime > 0.5 else {
+            shakeDetector.reset()
+            return
+        }
+        let acceleration = Vec3(x: data.userAcceleration.x, y: data.userAcceleration.y, z: data.userAcceleration.z)
+        guard shakeDetector.ingest(time: data.timestamp, acceleration: acceleration), airMouseCanRecenter else { return }
+        recenterAirMouse()
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    private func syncAirMouseMapping() {
+        airTracker.setMapping(sweepDegrees: airMouseSweepDegrees, logicalWidth: airMouseLogicalWidth, logicalHeight: airMouseLogicalHeight)
+    }
+
+    private func pickAirMouseStone() {
+#if targetEnvironment(simulator)
+        let arguments = ProcessInfo.processInfo.arguments
+        if demo, let index = arguments.firstIndex(of: "--demo-stone"), index + 1 < arguments.count,
+           let stone = AirMouseStone(rawValue: arguments[index + 1]) {
+            airMouseAppearance = AirMouseStoneChoice(stone: stone, rotationDegrees: 0, mirrored: false, scale: 1)
+            return
+        }
+        if demo {
+            // Deterministic demo: always the default stone.
+            airMouseAppearance = AirMouseStoneChoice(stone: AirMouseStones.defaultStone, rotationDegrees: 0, mirrored: false, scale: 1)
+            return
+        }
+#endif
+        let previous = AirMouseStones.resolve(UserDefaults.standard.string(forKey: lastAirMouseStoneKey).flatMap(AirMouseStone.init(rawValue:)))
+        var generator = SystemRandomNumberGenerator()
+        func unit() -> Double { Double.random(in: 0..<1, using: &generator) }
+        let choice = AirMouseStones.appearance(previous: previous, units: (unit(), unit(), unit(), unit()))
+        airMouseAppearance = choice
+        UserDefaults.standard.set(choice.stone.rawValue, forKey: lastAirMouseStoneKey)
+    }
+
+    private func tickAirMouseCard() {
+        guard airSession, cardGesture.needsTick else { return }
+        applyCardActions(cardGesture.tick(movementTime))
+    }
+
+    private func applyCardActions(_ actions: [AirMouseCardGesture.Action]) {
+        if airMouseTwoFingerScrolls != cardGesture.twoFingerScrolls { airMouseTwoFingerScrolls = cardGesture.twoFingerScrolls }
+        if airMouseVerticalSlides != cardGesture.verticalFineSlides { airMouseVerticalSlides = cardGesture.verticalFineSlides }
+        for action in actions {
+            switch action {
+            case .pointer(let dx, let dy):
+                move(dx: dx, dy: dy, gain: 1)
+                flushMovement()
+            case .leftClick:
+                click("left", playFeedback: false)
+            case .rightClick:
+                click("right", playFeedback: false)
+            case .drag(let down):
+                setDragging(down, playFeedback: false)
+            case .scroll(let dy):
+                scroll(dy: dy)
+                flushMovement()
+            case .haptic(let kind):
+                playAirMouseHaptic(kind)
+            }
+        }
+    }
+
+    /// Impact generators stay silent when the system Haptics switch is off.
+    private func playAirMouseHaptic(_ kind: AirMouseCardGesture.Haptic) {
+#if SOFATAP_CONTROLLER_TESTING
+        if testSend != nil || testLiveSend != nil || testPairingConnect != nil { return }
+#endif
+        switch kind {
+        case .light:
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        case .medium:
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        case .mediumTwice:
+            let generator = UIImpactFeedbackGenerator(style: .medium)
+            generator.prepare()
+            generator.impactOccurred()
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 60_000_000)
+                generator.impactOccurred()
+            }
+        }
     }
 
     private func feedback() {
@@ -1495,7 +1910,7 @@ final class ControllerModel: ObservableObject {
             defaults.set("sent", forKey: "textDeliveryMarker")
         case .uncertain:
             defaults.set("uncertain", forKey: "textDeliveryMarker")
-        case .ready, .rejected:
+        case .ready, .rejected, .noFocus:
             if let prefix = lastSentDraft {
                 defaults.set(digest(prefix), forKey: "sentDraftDigest")
                 defaults.set(prefix.utf16.count, forKey: "sentDraftUTF16Length")

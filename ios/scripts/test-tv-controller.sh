@@ -7,6 +7,7 @@ TV_STAGE="$(mktemp -d "${TMPDIR:-/tmp}/sofatap-tv-controller-tests.XXXXXX")"
 trap 'rm -rf "$TV_STAGE"' EXIT
 xcrun --sdk macosx swiftc -parse-as-library -swift-version 5 \
     -target "$(uname -m)-apple-macosx14.0" \
+    "$REPO_ROOT/ios/SofaTap/Core/SofaClock.swift" \
     "$REPO_ROOT/ios/SofaTap/Core/SavedDevice.swift" \
     "$REPO_ROOT/ios/SofaTap/Core/TV/"WebOS*.swift \
     "$REPO_ROOT/tests/WebOSTVControllerTests.swift" \

@@ -8,8 +8,14 @@
 
 /* Begin PBXBuildFile section */
 		003BCBE1CCF4CAB4EDC3E62F /* PairingCode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 464B9D8EC8DF4BC68A96EDCA /* PairingCode.swift */; };
+		B2E11B22C3D4E5F60718293A /* AirMouseMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F00A11B2C3D4E5F6071829 /* AirMouseMotion.swift */; };
+		B7C0DE22C3D4E5F607182902 /* AirMouseCardGesture.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C0DE11B2C3D4E5F6071801 /* AirMouseCardGesture.swift */; };
+		D4C33D44E5F60718293A4B5C /* AirMouseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D22C33D4E5F60718293A4B /* AirMouseView.swift */; };
+		A1B2C3D4E5F6A7B8C9D0E1F2 /* KareStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F6A7B8C9D0E1F2A3 /* KareStyle.swift */; };
 		0880E9F8731F50DEA8E7378E /* AndroidTVPairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6DC33E8052762AFA900FC59 /* AndroidTVPairingView.swift */; };
 		0BE3084A48A20D1B2A26FF38 /* PeerTransportDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B025E89091221B07940DE33 /* PeerTransportDiscovery.swift */; };
+		A15C0E0115C0E0115C0E0115 /* IOS15Compat.swift in Sources */ = {isa = PBXBuildFile; fileRef = A15C0E0215C0E0215C0E0216 /* IOS15Compat.swift */; };
+		B15C0E0315C0E0315C0E0317 /* SofaClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = B15C0E0415C0E0415C0E0418 /* SofaClock.swift */; };
 		0C3B35855B50DA22F878C842 /* PairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8F19D4B8423478A9CA42C50 /* PairingView.swift */; };
 		14781C4CA2D4BF8AA1B01BFC /* AndroidTVController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51766130EE2B9540E1118AD5 /* AndroidTVController.swift */; };
 		235031F88751C7AF87089F98 /* ControllerModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A3175A3377E3E1F6F1FD381 /* ControllerModel.swift */; };
@@ -19,6 +25,7 @@
 		2CA8D98DD58E0E28DC36DD7A /* TouchGestureState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 895EB1B944638483C701ADDC /* TouchGestureState.swift */; };
 		320D03B356374CB42AB659EB /* GestureConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CD153A949AB5AE1D0EF3CC3 /* GestureConfiguration.swift */; };
 		390FF8AC98B4923D8FE0BD44 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 951A32A70DFF898858DD7CDD /* Assets.xcassets */; };
+		C1D2E3F4A5B6C7D8E9F0A1B2 /* InstrumentSerif-Italic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = D2E3F4A5B6C7D8E9F0A1B2C3 /* InstrumentSerif-Italic.ttf */; };
 		3D5EF8B303AB20CF62A7EAE4 /* UnlockProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4A7AE9B52EF945FBF4ADE53 /* UnlockProtocol.swift */; };
 		57D1C6677714CCDE21AC5467 /* AndroidTVProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = D18FB04130086BA45CCC4601 /* AndroidTVProtocol.swift */; };
 		5B741448790C9BB1956C5E80 /* DeviceGuideContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53495476F4E1A21926CBCAD3 /* DeviceGuideContext.swift */; };
@@ -59,8 +66,14 @@
 
 /* Begin PBXFileReference section */
 		0416314FF9ABB35588FD4779 /* EdgeScrollStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeScrollStrip.swift; sourceTree = "<group>"; };
+		A1F00A11B2C3D4E5F6071829 /* AirMouseMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirMouseMotion.swift; sourceTree = "<group>"; };
+		A7C0DE11B2C3D4E5F6071801 /* AirMouseCardGesture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirMouseCardGesture.swift; sourceTree = "<group>"; };
+		C3D22C33D4E5F60718293A4B /* AirMouseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirMouseView.swift; sourceTree = "<group>"; };
+		B2C3D4E5F6A7B8C9D0E1F2A3 /* KareStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KareStyle.swift; sourceTree = "<group>"; };
 		073F44E198299E317E1E4D3D /* NativeControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeControls.swift; sourceTree = "<group>"; };
 		0CD153A949AB5AE1D0EF3CC3 /* GestureConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GestureConfiguration.swift; sourceTree = "<group>"; };
+		A15C0E0215C0E0215C0E0216 /* IOS15Compat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOS15Compat.swift; sourceTree = "<group>"; };
+		B15C0E0415C0E0415C0E0418 /* SofaClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SofaClock.swift; sourceTree = "<group>"; };
 		0FC98CB31D572AB388B6B719 /* SofaTap.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SofaTap.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A4540689F5AEF8C5E7E7475 /* PointerTiming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointerTiming.swift; sourceTree = "<group>"; };
 		1B97D575181E25F83B3EFBFD /* UnlockCredentialVault.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnlockCredentialVault.swift; sourceTree = "<group>"; };
@@ -105,6 +118,7 @@
 		8BBE37D2E9367D549188005C /* hi */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = hi; path = hi.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		8E456A2636B418FE1F7D1358 /* SavedDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedDevice.swift; sourceTree = "<group>"; };
 		951A32A70DFF898858DD7CDD /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		D2E3F4A5B6C7D8E9F0A1B2C3 /* InstrumentSerif-Italic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fonts/InstrumentSerif-Italic.ttf"; sourceTree = "<group>"; };
 		95606E97C5C6FFEA489A4B4B /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = de; path = de.lproj/Localizable.strings; sourceTree = "<group>"; };
 		9606A77DF1CE0D82EB3F153F /* TVAuxiliaryPager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVAuxiliaryPager.swift; sourceTree = "<group>"; };
 		9BA691589E2CFD49ECBD6683 /* PeerTLSBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerTLSBridge.swift; sourceTree = "<group>"; };
@@ -136,11 +150,14 @@
 		48AD4029C135513A254E55C4 /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				A7C0DE11B2C3D4E5F6071801 /* AirMouseCardGesture.swift */,
+				A1F00A11B2C3D4E5F6071829 /* AirMouseMotion.swift */,
 				5315D7C30FD44FEBDC00AB29 /* ComputerUnlockController.swift */,
 				7A3175A3377E3E1F6F1FD381 /* ControllerModel.swift */,
 				53495476F4E1A21926CBCAD3 /* DeviceGuideContext.swift */,
 				CB516F458F92F797A2D61F61 /* EdgeScrollGesture.swift */,
 				0CD153A949AB5AE1D0EF3CC3 /* GestureConfiguration.swift */,
+				A15C0E0215C0E0215C0E0216 /* IOS15Compat.swift */,
 				6898F264D24CA602D5304DA0 /* Pairing.swift */,
 				F17CF4D2856EC5897FC4CE23 /* PairingAttemptState.swift */,
 				464B9D8EC8DF4BC68A96EDCA /* PairingCode.swift */,
@@ -149,6 +166,7 @@
 				1A4540689F5AEF8C5E7E7475 /* PointerTiming.swift */,
 				8836BE62D39309B8AF525D9F /* ReceiverState.swift */,
 				8E456A2636B418FE1F7D1358 /* SavedDevice.swift */,
+				B15C0E0415C0E0415C0E0418 /* SofaClock.swift */,
 				1CFE8991201D1F2D103B6851 /* SpeechDictationController.swift */,
 				895EB1B944638483C701ADDC /* TouchGestureState.swift */,
 				A5B5E1C1C1C0D5EEC852A841 /* TVAuxiliaryControls.swift */,
@@ -163,6 +181,7 @@
 			isa = PBXGroup;
 			children = (
 				951A32A70DFF898858DD7CDD /* Assets.xcassets */,
+				D2E3F4A5B6C7D8E9F0A1B2C3 /* InstrumentSerif-Italic.ttf */,
 				F559181B1DC8444C237039F4 /* Info.plist */,
 				3717B15001E2480956B638CE /* PrivacyInfo.xcprivacy */,
 				B2194963D13F182243533BEB /* SofaTapApp.swift */,
@@ -201,6 +220,8 @@
 		B49CA2B0F841DC5E1D5FA3DE /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				C3D22C33D4E5F60718293A4B /* AirMouseView.swift */,
+				B2C3D4E5F6A7B8C9D0E1F2A3 /* KareStyle.swift */,
 				B7278E8AE3984D11185A862A /* AddDeviceView.swift */,
 				2579134CBB91C5AF446BB081 /* AndroidTVComposer.swift */,
 				27466787F2CA3B385E583839 /* AndroidTVNavigationView.swift */,
@@ -300,6 +321,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				390FF8AC98B4923D8FE0BD44 /* Assets.xcassets in Resources */,
+				C1D2E3F4A5B6C7D8E9F0A1B2 /* InstrumentSerif-Italic.ttf in Resources */,
 				D9564E7710C99F8C4C4A87C8 /* InfoPlist.strings in Resources */,
 				9434097D51E493B438C2FCE6 /* Localizable.strings in Resources */,
 				62E055F9B738880A3F6FB68A /* PrivacyInfo.xcprivacy in Resources */,
@@ -313,6 +335,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B7C0DE22C3D4E5F607182902 /* AirMouseCardGesture.swift in Sources */,
+				B2E11B22C3D4E5F60718293A /* AirMouseMotion.swift in Sources */,
+				D4C33D44E5F60718293A4B5C /* AirMouseView.swift in Sources */,
+				A1B2C3D4E5F6A7B8C9D0E1F2 /* KareStyle.swift in Sources */,
 				A56D49F018B31B26158F30AA /* AddDeviceView.swift in Sources */,
 				B5CFBF6C0FCDCB2F7375011E /* AndroidTVComposer.swift in Sources */,
 				14781C4CA2D4BF8AA1B01BFC /* AndroidTVController.swift in Sources */,
@@ -339,6 +365,8 @@
 				0C3B35855B50DA22F878C842 /* PairingView.swift in Sources */,
 				AA37B03A8B49F6EEE62ADC1E /* PeerTLSBridge.swift in Sources */,
 				0BE3084A48A20D1B2A26FF38 /* PeerTransportDiscovery.swift in Sources */,
+				A15C0E0115C0E0115C0E0115 /* IOS15Compat.swift in Sources */,
+				B15C0E0315C0E0315C0E0317 /* SofaClock.swift in Sources */,
 				236D7795AA6EDE0FC0192473 /* PointerTiming.swift in Sources */,
 				DB24AEDE5DA4BDD2DDD5E78B /* ReceiverState.swift in Sources */,
 				E535D68E8BB20BB759348ADE /* RemoteGuideView.swift in Sources */,
@@ -497,7 +525,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -558,7 +586,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";

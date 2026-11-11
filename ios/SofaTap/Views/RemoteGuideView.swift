@@ -11,12 +11,17 @@ struct RemoteGuideView: View {
     private var currentConfiguration: GestureConfiguration { context.configuration(configuration) }
 
     var body: some View {
-        NavigationStack {
+        SofaNavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     deviceCard
                     if target == .television { televisionHelp }
                     if !context.tvNavigation { mappingCard }
+                    if target == .computer {
+                        guideCard("hand.point.up.left", gesture: .scroll,
+                                  title: String(localized: "空鼠"),
+                                  detail: String(localized: "按住石子挥动手机，光标大幅移动；按住时单指在石子上滑动，光标精细移动。双指上下滑动滚动页面。轻点单击，轻点两下双击，按住不动右键，轻点后按住拖动。"))
+                    }
                     if context.showsTVTextInputHelp {
                         guideCard("keyboard", gesture: .text,
                                   title: String(localized: "电视键盘与语音输入"),
@@ -61,7 +66,7 @@ struct RemoteGuideView: View {
         VStack(alignment: .leading, spacing: 10) {
             Label(target == .television ? String(localized: "电视操作指南") : String(localized: "电脑操作指南"),
                   systemImage: target == .television ? "tv" : "desktopcomputer")
-                .font(.title2.weight(.semibold))
+                .sofaTextStyle(.title2, weight: .semibold)
             Text(context.deviceName).font(.headline)
                 .accessibilityIdentifier("guideDeviceName")
             HStack {

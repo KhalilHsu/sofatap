@@ -37,7 +37,7 @@ import Network
         guard availability.last == false else { fatalError("stopping monitor retained availability") }
         let discovery = PeerTransportDiscovery(serviceName: String(name), interfacePrefix: "")
         defer { discovery.stop() }
-        let endpoint = try await discovery.find(timeout: .seconds(5))
+        let endpoint = try await discovery.find(timeout: 5)
         guard case .service(let found, _, _, let interface) = endpoint,
               found == name, interface != nil else { fatalError("wrong or unscoped service") }
         // Successful resolution retains the browser until the owner stops it.
@@ -45,20 +45,20 @@ import Network
         discovery.stop()
         guard !discovery.isBrowsing else { fatalError("browser leaked") }
         let missing = PeerTransportDiscovery(serviceName: "missing-" + UUID().uuidString)
-        do { _ = try await missing.find(timeout: .milliseconds(100)); fatalError("wrong receiver accepted") }
+        do { _ = try await missing.find(timeout: 0.1); fatalError("wrong receiver accepted") }
         catch { guard !missing.isBrowsing else { fatalError("timeout leaked browser") } }
         let wrongInterface = PeerTransportDiscovery(serviceName: String(name), interfacePrefix: "not-an-interface-")
-        do { _ = try await wrongInterface.find(timeout: .milliseconds(200)); fatalError("interface restriction bypassed") }
+        do { _ = try await wrongInterface.find(timeout: 0.2); fatalError("interface restriction bypassed") }
         catch { guard (error as? URLError)?.code == .timedOut else { throw error } }
         let pending = PeerTransportDiscovery(serviceName: "missing-" + UUID().uuidString)
-        let pendingTask = Task { try await pending.find(timeout: .seconds(5)) }
+        let pendingTask = Task { try await pending.find(timeout: 5) }
         while !pending.isBrowsing { await Task.yield() }
         pendingTask.cancel()
         do { _ = try await pendingTask.value; fatalError("pending cancellation succeeded") }
         catch { guard (error as? URLError)?.code == .cancelled else { throw error } }
         guard !pending.isBrowsing else { fatalError("pending cancellation leaked browser") }
         let cancelled = PeerTransportDiscovery(serviceName: String(name))
-        let task = Task { try await cancelled.find(timeout: .seconds(5)) }
+        let task = Task { try await cancelled.find(timeout: 5) }
         task.cancel()
         do { _ = try await task.value; fatalError("cancelled discovery succeeded") }
         catch {}
@@ -67,7 +67,7 @@ import Network
         guard !cancelled.isBrowsing else { fatalError("cancelled browser leaked") }
         let stopped = PeerTransportDiscovery(serviceName: String(name))
         stopped.stop()
-        do { _ = try await stopped.find(timeout: .seconds(1)); fatalError("stopped browser restarted") }
+        do { _ = try await stopped.find(timeout: 1); fatalError("stopped browser restarted") }
         catch {}
         let disappearing = PeerTransportDiscovery(serviceName: String(name), interfacePrefix: "")
         var isAvailable = false

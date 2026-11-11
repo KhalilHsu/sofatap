@@ -4,6 +4,7 @@ REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 POINTER_STAGE="$(mktemp -d "${TMPDIR:-/tmp}/sofatap-pointer-tests.XXXXXX")"
 trap 'rm -rf "$POINTER_STAGE"' EXIT
 xcrun swiftc -warnings-as-errors \
+    "$REPO_ROOT/ios/SofaTap/Core/SofaClock.swift" \
     "$REPO_ROOT/ios/SofaTap/Core/GestureConfiguration.swift" \
     "$REPO_ROOT/ios/SofaTap/Core/TouchGestureState.swift" \
     "$REPO_ROOT/ios/SofaTap/Core/PointerTiming.swift" \

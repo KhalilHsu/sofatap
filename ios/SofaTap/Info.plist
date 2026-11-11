@@ -29,4 +29,5 @@
   <key>NSMotionUsageDescription</key><string>Use iPhone motion for pointer control when motion input is active.</string>
   <key>ITSAppUsesNonExemptEncryption</key><false/>
   <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
+  <key>UIAppFonts</key><array><string>InstrumentSerif-Italic.ttf</string></array>
 </dict></plist>

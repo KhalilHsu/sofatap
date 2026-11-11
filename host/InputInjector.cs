@@ -52,6 +52,9 @@ public sealed class WindowsInput : IInputInjector
             if (!Available) throw new InputInjectionException("input_unavailable: No interactive Windows desktop is available. Sign in and unlock the PC.");
             switch (action.Type)
             {
+                case "center":
+                case "selectDisplay":
+                    throw new InputInjectionException("invalid_message: This receiver cannot address displays.");
                 case "move":
                     _fractionX += action.Dx; _fractionY += action.Dy;
                     var x = (int)_fractionX; var y = (int)_fractionY;

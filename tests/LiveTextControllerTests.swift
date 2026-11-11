@@ -147,11 +147,11 @@ struct LiveTextControllerTests {
         unsupported.model.sendText()
         check("fallback sending status shows pending delivery", unsupported.model.textStatus.contains("等待电脑确认"))
         unsupported.reply(1)
-        check("fallback successful receipt replaces unsupported hint", unsupported.model.textStatus.contains("已向电脑系统提交"))
+        check("fallback successful receipt clears every hint", unsupported.model.textStatus.isEmpty)
         unsupported.model.clearDraft()
         unsupported.model.editText("新内容", selection: NSRange(location: 3, length: 0), marked: false)
         unsupported.model.sendText(); unsupported.reply(2, error: "input_unavailable")
-        check("fallback rejection displays the actual delivery error", unsupported.model.textStatus.contains("未被电脑接受：input_unavailable"))
+        check("fallback rejection says the text did not reach the computer", unsupported.model.textStatus == "没有送到电脑" && unsupported.model.textDelivery == .rejected("input_unavailable"))
         let importedFallback = LiveFixture(); importedFallback.begin("电脑已有的文字")
         importedFallback.model.testReceiveFocus(1)
         importedFallback.model.openTextEditor(); importedFallback.reply(2, error: "live_text_unsupported")
@@ -238,6 +238,42 @@ struct LiveTextControllerTests {
         check("live editor accessibility describes automatic synchronization", loadingEditor.editorAccessibilityLabel == "与电脑实时同步的文字和选区")
         loadingEditor.liveEditing = false
         check("fallback accessibility describes an unsent draft", loadingEditor.editorAccessibilityLabel == "要发送到电脑的文字草稿")
+        func pump() { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
+        func syncs(_ fixture: LiveEditorFixture) -> [String] {
+            fixture.transport.frames.filter { $0.type == "textSync" }.compactMap { $0.fields["text"] as? String }
+        }
+        // Dictation 1: marked increments, then unmark. Only the final string syncs.
+        let marked = LiveEditorFixture("")
+        for partial in ["今", "今天", "今天天气", "今天天气很好"] {
+            marked.view.setMarkedText(partial, selectedRange: NSRange(location: partial.utf16.count, length: 0)); pump()
+        }
+        check("dictation marked increments never send textSync", syncs(marked).isEmpty && marked.transport.model.composing)
+        marked.view.unmarkText(); pump(); marked.ackAll()
+        check("unmark sends exactly the final dictation string once", syncs(marked) == ["今天天气很好"] && !marked.transport.model.composing)
+
+        // Dictation 2: keyboard dictation streams plain text, then replaces it whole.
+        let whole = LiveEditorFixture("")
+        whole.view.simulateDictation(true)
+        whole.view.insertText("hello"); pump()
+        whole.view.insertText(" world"); pump()
+        whole.view.textStorage.replaceCharacters(in: NSRange(location: 0, length: whole.view.textStorage.length), with: "Hello, world."); pump()
+        check("in-progress keyboard dictation stays on the phone", syncs(whole).isEmpty && whole.transport.model.composing)
+        whole.view.simulateDictation(false); pump(); whole.ackAll()
+        check("dictation end sends only the whole replacement", syncs(whole) == ["Hello, world."] && whole.transport.model.draft == "Hello, world." && !whole.transport.model.composing)
+
+        // Dictation 3: the app's own microphone partials (model level).
+        let mic = LiveFixture(); mic.begin()
+        for partial in ["打开", "打开设置", "打开设置页面"] {
+            mic.model.editText(partial, selection: NSRange(location: partial.utf16.count, length: 0), marked: true)
+        }
+        check("mic partials are not transmitted", mic.frames.count == 1)
+        mic.model.finishDictation()
+        check("mic end publishes the final text once", mic.frames.count == 2 && mic.frames[1].type == "textSync" && mic.frames[1].fields["text"] as? String == "打开设置页面")
+
+        // Regression: ordinary typing still syncs per edit.
+        let typing = LiveEditorFixture("")
+        typing.view.insertText("a"); typing.ackAll(); typing.view.insertText("b"); typing.ackAll()
+        check("normal keyboard typing still syncs live", syncs(typing).last == "ab" && !typing.transport.model.composing)
         print("Live text controller: \(passed) recording-transport and UIKit checks passed without windows or OS input")
     }
 }

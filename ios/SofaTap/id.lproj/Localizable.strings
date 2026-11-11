@@ -502,3 +502,56 @@
 "松手取消" = "Angkat untuk membatalkan";
 "轻点发送，左右滑动查看更多" = "Ketuk untuk mengirim, geser untuk melihat lainnya";
 "左右分区双击，长按快捷键，双击按住拖动。" = "Ketuk dua kali per sisi, tekan lama untuk pintasan, ketuk dua kali lalu tahan untuk menyeret.";
+/* Temporary gyro air mouse. */
+"陀螺空鼠" = "Mouse udara giro";
+"暂时入口" = "Pintu masuk sementara";
+"回中" = "Ke tengah";
+"按住石子移动光标，松手立刻停止。轻点单击。" = "Tahan batu untuk menggerakkan penunjuk. Lepas untuk berhenti. Ketukan singkat mengeklik.";
+"选择电视屏幕" = "Pilih layar TV";
+"主屏幕" = "Layar utama";
+"灵敏度" = "Sensitivitas";
+"慢" = "Lambat";
+"快" = "Cepat";
+"手腕转一点，光标走多远" = "Seberapa jauh penunjuk bergerak saat pergelangan tangan berputar sedikit";
+"触控板" = "Trackpad";
+"连接 Mac 后可用" = "Tersedia setelah terhubung ke Mac";
+"横划右键" = "Geser untuk klik kanan";
+"右键按住时长" = "Durasi tahan klik kanan";
+"按住石子移动光标，松手停止，轻点单击" = "Tahan batu untuk menggerakkan kursor. Lepas untuk berhenti. Ketuk untuk klik.";
+"按住移动 · 轻点单击" = "Tahan untuk bergerak · Ketuk untuk klik";
+"电视屏幕" = "Layar TV";
+/* Air mouse device menu and shake recenter. */
+"光标回中" = "Pusatkan penunjuk";
+"设备与配对" = "Perangkat dan pemasangan";
+"灵敏度与手势" = "Sensitivitas dan gestur";
+"摇一摇回中" = "Goyang untuk memusatkan";
+"手指离开屏幕时摇一下手机，光标回到屏幕中间" = "Tanpa menyentuh layar, goyangkan ponsel untuk mengembalikan penunjuk ke tengah";
+/* 枯山水 device sheet and surface tabs. */
+"设备" = "Perangkat";
+"触控" = "Trackpad";
+"空鼠" = "Mouse udara";
+"或摇一摇" = "atau goyangkan";
+"添加或配对设备" = "Tambah atau pasangkan perangkat";
+"仅支持触控板" = "Hanya trackpad";
+/* 枯山水 stone names and settings row. */
+"设置" = "Pengaturan";
+"玄武岩" = "Basal";
+"花岗岩" = "Granit";
+"辉长岩" = "Gabro";
+"板岩" = "Batu sabak";
+"绿岩" = "Batu hijau";
+/* Air mouse two-finger scroll hint and guide card. */
+"两指上下滑 · 滚动" = "Geser dua jari ke atas/bawah · Gulir";
+"按住石子挥动手机，光标大幅移动；按住时单指在石子上滑动，光标精细移动。双指上下滑动滚动页面。轻点单击，轻点两下双击，按住不动右键，轻点后按住拖动。" = "Tahan batu dan gerakkan ponsel untuk memindahkan penunjuk jauh; sambil menahan, geser satu jari di atas batu untuk gerakan halus. Geser dua jari ke atas atau bawah untuk menggulir. Ketuk untuk klik, ketuk dua kali untuk klik ganda, tahan diam untuk klik kanan, ketuk lalu tahan untuk menyeret.";
+/* Explicit text delivery hints. */
+"没有送到电脑" = "Tidak sampai ke komputer";
+"电脑上没有可输入的位置，请先点一下输入框" = "Tidak ada tempat mengetik di komputer. Klik kolom teks dulu";
+"连接断了一下，不确定电脑收到没有" = "Koneksi sempat terputus. Belum pasti komputer menerimanya";
+"重试" = "Coba lagi";
+"已上屏" = "Sudah muncul";
+"再发一次" = "Kirim lagi";
+
+/* Re-pair screen: English fallback on purpose; only zh-Hans and en are maintained. */
+"需要重新配对" = "Pair again";
+"在 Mac 上打开 Sofatap，扫一下屏幕上的二维码" = "Open Sofatap on your Mac and scan the code on screen.";
+"扫码配对" = "Scan to pair";

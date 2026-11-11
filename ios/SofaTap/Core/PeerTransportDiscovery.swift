@@ -46,7 +46,7 @@ import Network
         startBrowser()
     }
 
-    func find(timeout: Duration = .seconds(3)) async throws -> NWEndpoint {
+    func find(timeout: TimeInterval = 3) async throws -> NWEndpoint {
         try Task.checkCancellation()
         return try await withTaskCancellationHandler {
             let endpoint: NWEndpoint = try await withCheckedThrowingContinuation { continuation in
@@ -57,7 +57,7 @@ import Network
                 completion = continuation
                 startBrowser()
                 deadline = Task { [weak self] in
-                    do { try await Task.sleep(for: timeout) } catch { return }
+                    do { try await SofaClock.sleep(seconds: timeout) } catch { return }
                     self?.stop(error: URLError(.timedOut))
                 }
             }

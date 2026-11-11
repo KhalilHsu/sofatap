@@ -3,6 +3,7 @@ using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using QRCoder;
 
@@ -14,6 +15,14 @@ public sealed class ReceiverServer(ReceiverOptions options, Credentials credenti
     Func<ILiveTextEditor>? textEditorFactory = null, ISystemVolume? systemVolume = null)
 {
     private readonly SemaphoreSlim _controller = new(1, 1);
+    // A live controller pings every 0.75 s (5 s on legacy phones). A session that
+    // has been silent this long is a dead route (for example a stalled peer-to-peer
+    // link whose FIN never arrived); a new authenticated connection may replace it
+    // instead of getting 409 until the 20 s idle timeout.
+    internal static readonly TimeSpan StaleControllerAfter = TimeSpan.FromSeconds(6);
+    private readonly object _activeLock = new();
+    private CancellationTokenSource? _activeController;
+    private long _lastControllerFrame;
     private readonly CachedSystemVolume? _volume = options.DryRun || systemVolume is null ? null : new(systemVolume);
     private static readonly JsonSerializerOptions JsonOptions = LiveTextWire.Options;
     private readonly byte[] _token = Encoding.ASCII.GetBytes(credentials.Token);
@@ -49,7 +58,7 @@ public sealed class ReceiverServer(ReceiverOptions options, Credentials credenti
         if (context.Request.Headers.ContainsKey("Origin")) { context.Response.StatusCode = 403; return; }
         if (!Authorized(context.Request)) { context.Response.StatusCode = 401; return; }
         if (!context.WebSockets.IsWebSocketRequest) { context.Response.StatusCode = 400; return; }
-        if (!await _controller.WaitAsync(0, context.RequestAborted)) { context.Response.StatusCode = 409; return; }
+        if (!await AcquireController(context.RequestAborted)) { context.Response.StatusCode = 409; return; }
         try
         {
             using var socket = await context.WebSockets.AcceptWebSocketAsync();
@@ -58,6 +67,14 @@ public sealed class ReceiverServer(ReceiverOptions options, Credentials credenti
         catch (OperationCanceledException) { }
         catch (WebSocketException) { }
         finally { input.ReleaseAll(); _controller.Release(); }
+    }
+    private async Task<bool> AcquireController(CancellationToken cancellation)
+    {
+        if (await _controller.WaitAsync(0, cancellation)) return true;
+        var silentFor = TimeSpan.FromMilliseconds(Environment.TickCount64 - Interlocked.Read(ref _lastControllerFrame));
+        if (silentFor < StaleControllerAfter) return false;
+        lock (_activeLock) { _activeController?.Cancel(); }
+        return await _controller.WaitAsync(TimeSpan.FromSeconds(3), cancellation);
     }
     private bool Authorized(HttpRequest request)
     {
@@ -70,18 +87,52 @@ public sealed class ReceiverServer(ReceiverOptions options, Credentials credenti
     // The retired account-password pilot must not be discoverable, even when a
     // legacy enrollment file remains on disk. PIN control needs a separate, verified protocol.
     internal static object CreateHello(string name, string platform, bool dryRun,
-        string status, TextFocusMetadata focus, bool liveTextSupported = false, bool systemVolumeSupported = false) => new
+        string status, TextFocusMetadata focus, bool liveTextSupported = false, bool systemVolumeSupported = false,
+        object? display = null, bool noFocusCheck = false) => new
     {
         type = "hello", version = 1, name, platform, dryRun,
         inputAvailable = status == "ready", inputStatus = status,
         textFocus = ReceiverDistribution.SupportsTextInspection ? focus : new TextFocusMetadata("unknown", 0),
         liveText = ReceiverDistribution.SupportsTextInspection && liveTextSupported && !dryRun ? new { version = 1 } : null,
-        systemVolume = systemVolumeSupported && !dryRun && status == "ready" ? new { version = 1 } : null
+        systemVolume = systemVolumeSupported && !dryRun && status == "ready" ? new { version = 1 } : null,
+        // Opt-in: text frames with requireFocus get input_no_focus instead of typing.
+        textNoFocus = ReceiverDistribution.SupportsTextInspection && noFocusCheck && !dryRun ? new { version = 1 } : null,
+        // Null is omitted. Older clients ignore this object when a Mac receiver includes it.
+        display
     };
+
+    /// Ping metadata. A missing display property preserves the phone's list; JSON null revokes it.
+    internal static JsonObject StatusPayload(ActionAck ack, string status, bool dryRun, TextFocusMetadata focus,
+        bool volume, DisplayReadResult displays)
+    {
+        var node = JsonSerializer.SerializeToNode(new
+        {
+            ack.Type, ack.Id, ack.Ok, ack.Error,
+            inputAvailable = status == "ready", inputStatus = status, dryRun,
+            textFocus = focus,
+            // JsonElement null is explicit even with WhenWritingNull: a
+            // removed/unsupported output must revoke a previous capability.
+            systemVolume = JsonSerializer.SerializeToElement(volume ? new { version = 1 } : null),
+            display = (object?)null
+        }, JsonOptions)!.AsObject();
+        var display = MacDisplayGeometry.Ping(displays.IsMac, displays.Succeeded, displays.Displays);
+        if (!display.Include) node.Remove("display");
+        else node["display"] = display.Node;
+        return node;
+    }
 
     private async Task RunController(WebSocket socket, CancellationToken requestAborted)
     {
-        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(requestAborted, _applicationStopping);
+        using var replaced = new CancellationTokenSource();
+        lock (_activeLock) { _activeController = replaced; }
+        Interlocked.Exchange(ref _lastControllerFrame, Environment.TickCount64);
+        try { await RunController(socket, requestAborted, replaced.Token); }
+        finally { lock (_activeLock) { if (ReferenceEquals(_activeController, replaced)) _activeController = null; } }
+    }
+
+    private async Task RunController(WebSocket socket, CancellationToken requestAborted, CancellationToken replaced)
+    {
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(requestAborted, _applicationStopping, replaced);
         var focusTracker = new TextFocusTracker();
         TextFocusMetadata Focus(string code) => focusTracker.Update(
             ReceiverDistribution.SupportsTextInspection && code == "ready" && !options.DryRun && textFocus is not null
@@ -89,9 +140,13 @@ public sealed class ReceiverServer(ReceiverOptions options, Credentials credenti
         var status = ReceiverPlatform.StatusCode(input, options.DryRun);
         using var liveText = ReceiverDistribution.SupportsTextInspection && !options.DryRun && textEditorFactory is not null
             ? new LiveTextSession(textEditorFactory(), () => ReceiverPlatform.StatusCode(input, options.DryRun) == "ready") : null;
+        var displays = MacDisplayProbe.Read();
+        var displayCapability = displays.Succeeded ? MacDisplayGeometry.Capability(displays.Displays) : null;
+        var focusCheck = ReceiverDistribution.SupportsTextInspection && !options.DryRun && textFocus is not null;
         await Send(socket, CreateHello(Environment.MachineName, ReceiverPlatform.Id,
-            options.DryRun, status, Focus(status), liveText is not null, VolumeAvailable(status)), lifetime.Token);
-        var session = new ActionSession(input, liveText: liveText, systemVolume: _volume);
+            options.DryRun, status, Focus(status), liveText is not null, VolumeAvailable(status), displayCapability, focusCheck), lifetime.Token);
+        var session = new ActionSession(input, liveText: liveText, systemVolume: _volume,
+            textFocus: focusCheck ? () => textFocus!.Read().Kind : null);
         var buffer = new byte[Protocol.MaximumFrameBytes + 1];
         while (socket.State == WebSocketState.Open && !lifetime.IsCancellationRequested)
         {
@@ -110,6 +165,7 @@ public sealed class ReceiverServer(ReceiverOptions options, Credentials credenti
                     offset += received.Count;
                     if (offset > Protocol.MaximumFrameBytes) { await Close(socket, WebSocketCloseStatus.MessageTooBig, "Frame exceeds 64 KiB."); return; }
                 } while (!received.EndOfMessage);
+                Interlocked.Exchange(ref _lastControllerFrame, Environment.TickCount64);
                 var bytes = buffer.AsMemory(0, offset);
                 ActionAck ack;
                 bool isPing = false;
@@ -133,13 +189,9 @@ public sealed class ReceiverServer(ReceiverOptions options, Credentials credenti
                 {
                     var currentStatus = ReceiverPlatform.StatusCode(input, options.DryRun);
                     if (currentStatus != "ready") liveText?.End();
-                    await Send(socket, new { ack.Type, ack.Id, ack.Ok, ack.Error,
-                        inputAvailable = currentStatus == "ready", inputStatus = currentStatus, dryRun = options.DryRun,
-                        textFocus = Focus(currentStatus),
-                        // JsonElement null is explicit even with WhenWritingNull: a
-                        // removed/unsupported output must revoke a previous capability.
-                        systemVolume = JsonSerializer.SerializeToElement(VolumeAvailable(currentStatus) ? new { version = 1 } : null)
-                    }, lifetime.Token);
+                    var currentDisplays = MacDisplayProbe.Read();
+                    await Send(socket, StatusPayload(ack, currentStatus, options.DryRun, Focus(currentStatus),
+                        VolumeAvailable(currentStatus), currentDisplays), lifetime.Token);
                 }
                 else await Send(socket, ack, lifetime.Token);
             }
@@ -190,8 +242,9 @@ public sealed class ReceiverServer(ReceiverOptions options, Credentials credenti
     }
     private string[] LocalAddresses()
     {
-        var certificateAddresses = credentials.CertificateIPv4.ToHashSet(StringComparer.Ordinal);
-        var addresses = NetworkAddresses.LocalIPv4().Where(certificateAddresses.Contains).ToArray();
-        return addresses;
+        // Phones authenticate the receiver by its pinned leaf fingerprint, not by
+        // the hostname/IP SAN, so every current address can be offered without
+        // rotating the paired identity when the network changes.
+        return NetworkAddresses.LocalIPv4();
     }
 }

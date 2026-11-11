@@ -19,10 +19,35 @@ struct NativeDraftEditor: UIViewRepresentable {
     /// empty draft. Keep that key distinct from deleting local/marked text.
     final class TextView: UITextView {
         var onEmptyBackspace: (() -> Void)?
+        /// Keyboard dictation can stream text without a marked range and finish
+        /// with a whole-result replacement that never calls textViewDidChange.
+        var onDictationChange: (() -> Void)?
+        private(set) var dictating = false
+        /// True while keyboard dictation or an IME composition is still provisional.
+        var composingInput: Bool { markedTextRange != nil || dictating }
         override func deleteBackward() {
             let empty = isEditable && text.isEmpty && selectedRange.length == 0 && markedTextRange == nil
             super.deleteBackward()
             if empty { onEmptyBackspace?() }
+        }
+        override func insertDictationResult(_ dictationResult: [UIDictationPhrase]) {
+            dictating = true
+            super.insertDictationResult(dictationResult)
+            dictating = false
+            onDictationChange?()
+        }
+        // iOS 15 keyboard dictation types into the view while the dictation
+        // input mode is current; treat that period as provisional.
+        func refreshDictationMode() {
+            let active = textInputMode?.primaryLanguage == "dictation"
+            guard active != dictating else { return }
+            dictating = active
+            onDictationChange?()
+        }
+        /// Test hook: mirrors the keyboard's dictation lifecycle without a microphone.
+        func simulateDictation(_ active: Bool) {
+            dictating = active
+            onDictationChange?()
         }
     }
 
@@ -34,13 +59,16 @@ struct NativeDraftEditor: UIViewRepresentable {
         func flushForSend() -> Bool { coordinator?.flushForSend() ?? false }
     }
 
+#if DEBUG
+    static let soakNotification = Notification.Name("SofaTapSoak")
+#endif
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeUIView(context: Context) -> UITextView {
         let view = TextView()
         view.delegate = context.coordinator
         view.backgroundColor = .clear
         view.textColor = UIColor(white: 0.94, alpha: 1)
-        view.tintColor = UIColor(red: 0.722, green: 0.953, blue: 0.816, alpha: 1)
+        view.tintColor = UIColor(red: 0.831, green: 0.529, blue: 0.290, alpha: 1)
         view.font = .systemFont(ofSize: 19, weight: .regular)
         view.textContainerInset = UIEdgeInsets(top: 12, left: 9, bottom: 12, right: 9)
         view.keyboardDismissMode = .interactive
@@ -79,11 +107,68 @@ struct NativeDraftEditor: UIViewRepresentable {
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: NativeDraftEditor
         weak var textView: UITextView? {
-            willSet { (textView as? TextView)?.onEmptyBackspace = nil }
+            willSet {
+                (textView as? TextView)?.onEmptyBackspace = nil
+                (textView as? TextView)?.onDictationChange = nil
+                if let storageObserver { NotificationCenter.default.removeObserver(storageObserver) }
+                if let modeObserver { NotificationCenter.default.removeObserver(modeObserver) }
+                storageObserver = nil
+                modeObserver = nil
+            }
             didSet {
                 lastObservedNativeText = textView?.text ?? ""
+#if DEBUG
+                attachSoak()
+#endif
                 (textView as? TextView)?.onEmptyBackspace = { [weak self] in self?.emptyBackspace() }
+                (textView as? TextView)?.onDictationChange = { [weak self] in self?.nativeChangedOutsideDelegate() }
+                modeObserver = NotificationCenter.default.addObserver(
+                    forName: UITextInputMode.currentInputModeDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+                    (self?.textView as? TextView)?.refreshDictationMode()
+                }
+                if let storage = textView?.textStorage {
+                    // Whole-text replacements (dictation results, some keyboards) can
+                    // change storage without a delegate callback. Publish them too.
+                    storageObserver = NotificationCenter.default.addObserver(
+                        forName: NSTextStorage.didProcessEditingNotification, object: storage, queue: .main) { [weak self] _ in
+                        DispatchQueue.main.async { self?.nativeChangedOutsideDelegate() }
+                    }
+                }
             }
+        }
+        private var storageObserver: NSObjectProtocol?
+        private var modeObserver: NSObjectProtocol?
+#if DEBUG
+        private var soakObserver: NSObjectProtocol?
+        func attachSoak() {
+            guard soakObserver == nil, ProcessInfo.processInfo.arguments.contains("--soak-typing") else { return }
+            soakObserver = NotificationCenter.default.addObserver(forName: NativeDraftEditor.soakNotification, object: nil, queue: .main) { [weak self] note in
+                guard let view = self?.textView as? TextView, let op = note.userInfo?["op"] as? String else { return }
+                let text = note.userInfo?["text"] as? String ?? ""
+                switch op {
+                case "type": view.insertText(text)
+                case "mark": view.setMarkedText(text, selectedRange: NSRange(location: text.utf16.count, length: 0))
+                case "dictStart": view.simulateDictation(true); self?.dictationStart = view.selectedRange.location
+                case "replaceTail":
+                    let start = self?.dictationStart ?? view.selectedRange.location
+                    let end = view.selectedRange.location
+                    if end >= start { view.textStorage.replaceCharacters(in: NSRange(location: start, length: end - start), with: text)
+                        view.selectedRange = NSRange(location: start + text.utf16.count, length: 0) }
+                case "dictEnd": view.simulateDictation(false)
+                case "clear": view.selectAll(nil); view.deleteBackward()
+                default: break
+                }
+            }
+        }
+        private var dictationStart: Int?
+#endif
+        private func isComposing(_ view: UITextView) -> Bool {
+            (view as? TextView)?.composingInput ?? (view.markedTextRange != nil)
+        }
+        private func nativeChangedOutsideDelegate() {
+            guard let view = textView, !applyingModelText, !publishingNativeText else { return }
+            let marked = isComposing(view)
+            if view.text != lastObservedNativeText || parent.composing != marked { publishNativeText(view) }
         }
         private var lastPublishedSelection: NSRange?
         private var lastPublishedText: String
@@ -118,17 +203,17 @@ struct NativeDraftEditor: UIViewRepresentable {
         @discardableResult
         func flushForSend() -> Bool {
             guard !applyingModelText, !publishingNativeText,
-                  let view = textView, view.markedTextRange == nil else { return false }
+                  let view = textView, !isComposing(view) else { return false }
             // This uses the same conflict ordering as normal delegate delivery:
             // explicit model clear/replacement wins, otherwise native text wins.
             publishNativeText(view)
-            return view.markedTextRange == nil
+            return !isComposing(view)
         }
         func synchronizeText(_ view: UITextView) {
             guard !applyingModelText, !publishingNativeText else { return }
             observeExternalText()
             // Let IME/keyboard dictation finish its marked range before replacing it.
-            guard view.markedTextRange == nil else { return }
+            guard !isComposing(view) else { return }
             if let replacement = pendingExternalText {
                 applyModelText(replacement, to: view)
             } else if view.text == lastObservedNativeText {
@@ -179,7 +264,7 @@ struct NativeDraftEditor: UIViewRepresentable {
                 if parent.text != lastPublishedText { parent.text = lastPublishedText }
                 publishingNativeText = false
             }
-            let marked = view.markedTextRange != nil
+            let marked = isComposing(view)
             if parent.composing != marked { parent.composing = marked }
             publishSelectionAndEdit(view, marked: marked)
         }
@@ -206,7 +291,7 @@ struct NativeDraftEditor: UIViewRepresentable {
         }
         func textViewDidChangeSelection(_ textView: UITextView) {
             guard !applyingModelText, !publishingNativeText else { return }
-            let marked = textView.markedTextRange != nil
+            let marked = isComposing(textView)
             if !marked && pendingExternalText != nil { synchronizeText(textView) }
             if parent.composing != marked { parent.composing = marked }
             // A keyboard edit can deliver selection before didChange. Publish
@@ -326,6 +411,7 @@ struct TouchSurface: UIViewRepresentable {
         }
         override func layoutSubviews() {
             super.layoutSubviews()
+            effects.setStyle(traitCollection.userInterfaceStyle)
             effects.layout(in: bounds)
 #if targetEnvironment(simulator)
             if window != nil, active { effects.startPreviewIfRequested() }

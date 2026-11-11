@@ -15,6 +15,7 @@ public sealed class MacInput : IInputInjector, IDisposable
     private readonly HashSet<uint> _buttons = [];
     private readonly Dictionary<ushort, MacEvent> _keys = [];
     private double _fractionX, _fractionY, _scrollX, _scrollY;
+    private string? _selectedDisplayId;
     private int _attempted;
     private uint? _lastClickButton;
     private MacPoint _lastClickPosition;
@@ -35,6 +36,7 @@ public sealed class MacInput : IInputInjector, IDisposable
         }
     }
     public bool Available => StatusCode == "ready";
+    internal string? SelectedDisplayId { get { lock (_gate) return _selectedDisplayId; } }
 
     /// <summary>Only call in response to an explicit local user action. Never from startup or a status check.</summary>
     public static void RequestAccess()
@@ -52,6 +54,25 @@ public sealed class MacInput : IInputInjector, IDisposable
             {
                 switch (action.Type)
                 {
+                    case "selectDisplay":
+                        if (!MacDisplayGeometry.Contains(_sink.DisplayCatalog, action.Display))
+                            throw new InputInjectionException("invalid_message: Unknown display.");
+                        _selectedDisplayId = action.Display;
+                        break;
+                    case "center":
+                        if (_buttons.Count > 0)
+                            throw new InputInjectionException("input_busy: Release the remote drag button before centering.");
+                        CheckMouseOwnership();
+                        if (!MacDisplayGeometry.TryCenter(_sink.DisplayCatalog, action.Display, out var center))
+                            throw new InputInjectionException("invalid_message: Unknown display.");
+                        _fractionX = 0; _fractionY = 0;
+                        ResetClicks();
+                        if (!_sink.WarpCursor(center))
+                            throw new InputInjectionException("input_failed: macOS could not move the pointer to the selected display.");
+                        _attempted++;
+                        _selectedDisplayId = action.Display;
+                        Submit(new(MacEventKind.Mouse, MouseType: 5, Position: center));
+                        break;
                     case "move":
                         CheckMouseOwnership();
                         _fractionX += action.Dx; _fractionY += action.Dy;
@@ -115,7 +136,9 @@ public sealed class MacInput : IInputInjector, IDisposable
             {
                 // A rejected click during a drag must not secretly release that drag while the
                 // phone still believes the button is held. No events have been attempted yet.
-                if (_attempted == 0 && error is InputInjectionException && error.Message.StartsWith("input_busy:", StringComparison.Ordinal))
+                if (_attempted == 0 && error is InputInjectionException &&
+                    (error.Message.StartsWith("input_busy:", StringComparison.Ordinal) ||
+                     error.Message.StartsWith("invalid_message: Unknown display.", StringComparison.Ordinal)))
                 { ResetClicks(); throw; }
                 ReleaseOwned();
                 if (_attempted > 0)
@@ -195,6 +218,7 @@ public sealed class MacInput : IInputInjector, IDisposable
             // Never replay releases into a different user's session after a lock or logout.
             _keys.Clear(); _buttons.Clear();
             _fractionX = 0; _fractionY = 0; _scrollX = 0; _scrollY = 0;
+            _selectedDisplayId = null;
             ResetClicks();
         }
     }
@@ -298,6 +322,8 @@ internal interface IMacEventSink
     string StatusCode { get; }
     MacPoint CursorPosition { get; }
     IReadOnlyList<MacRect> Displays { get; }
+    IReadOnlyList<MacDisplayInfo> DisplayCatalog { get; }
+    bool WarpCursor(MacPoint position);
     double MonotonicSeconds { get; }
     double DoubleClickInterval { get; }
     double DoubleClickDistance { get; }
@@ -364,19 +390,23 @@ internal sealed class QuartzEventSink : IMacEventSink, IDisposable
             finally { QuartzNative.CFRelease(item); }
         }
     }
-    public IReadOnlyList<MacRect> Displays
+    public IReadOnlyList<MacDisplayInfo> DisplayCatalog
     {
         get
         {
-            var ids = new uint[64];
-            if (QuartzNative.CGGetActiveDisplayList((uint)ids.Length, ids, out var count) != 0 || count == 0 || count > ids.Length)
+            var read = MacDisplayProbe.Read();
+            if (!read.Succeeded || read.Displays.Count == 0)
                 throw new InvalidOperationException("Could not read active displays.");
-            return ids.Take((int)count).Select(id =>
-            {
-                var rect = QuartzNative.CGDisplayBounds(id);
-                return new MacRect(rect.Origin.X, rect.Origin.Y, rect.Size.Width, rect.Size.Height);
-            }).ToArray();
+            return read.Displays;
         }
+    }
+    public IReadOnlyList<MacRect> Displays => DisplayCatalog.Select(display => display.Bounds).ToArray();
+    public bool WarpCursor(MacPoint position)
+    {
+        var point = new QuartzNative.Point { X = position.X, Y = position.Y };
+        if (QuartzNative.CGWarpMouseCursorPosition(point) != 0) return false;
+        QuartzNative.CGAssociateMouseAndMouseCursorPosition(true);
+        return true;
     }
     public bool KeyIsDown(ushort key) => QuartzNative.CGEventSourceKeyState(1, key);
     public bool ButtonIsDown(uint button) => QuartzNative.CGEventSourceButtonState(1, button);
@@ -462,6 +492,11 @@ internal static class QuartzNative
     [DllImport(CG)] internal static extern Point CGEventGetLocation(IntPtr item);
     [DllImport(CG)] internal static extern int CGGetActiveDisplayList(uint count, [Out] uint[] displays, out uint actual);
     [DllImport(CG)] internal static extern Rect CGDisplayBounds(uint display);
+    [DllImport(CG)] internal static extern uint CGMainDisplayID();
+    [DllImport(CG)] internal static extern IntPtr CGDisplayCopyDisplayMode(uint display);
+    [DllImport(CG)] internal static extern nuint CGDisplayModeGetPixelWidth(IntPtr mode);
+    [DllImport(CG)] internal static extern int CGWarpMouseCursorPosition(Point point);
+    [DllImport(CG)] internal static extern void CGAssociateMouseAndMouseCursorPosition([MarshalAs(UnmanagedType.I1)] bool connected);
     [DllImport(CG)] [return: MarshalAs(UnmanagedType.I1)] internal static extern bool CGEventSourceKeyState(int state, ushort key);
     [DllImport(CG)] [return: MarshalAs(UnmanagedType.I1)] internal static extern bool CGEventSourceButtonState(int state, uint button);
     [DllImport(CG)] internal static extern IntPtr CGEventCreateMouseEvent(IntPtr source, uint type, Point point, uint button);

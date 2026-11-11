@@ -26,6 +26,7 @@ struct EdgeScrollStrip: UIViewRepresentable {
     func updateUIView(_ view: ScrollInputView, context: Context) { view.configure(self) }
     static func dismantleUIView(_ view: ScrollInputView, coordinator: ()) { view.detach() }
 
+    @available(iOS 16, *)
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: ScrollInputView, context: Context) -> CGSize? {
         let height = proposal.height.flatMap { $0.isFinite ? $0 : nil } ?? 200
         return CGSize(width: Self.minimumHitWidth, height: max(Self.minimumHitWidth, height))
@@ -39,7 +40,9 @@ struct EdgeScrollStrip: UIViewRepresentable {
         private var fingerY: CGFloat?
         private var accessibilityFeedback = false
         private var feedbackReset: DispatchWorkItem?
-        private let mint = UIColor(red: 0.655, green: 0.929, blue: 0.796, alpha: 1)
+        private let ink = UIColor { $0.userInterfaceStyle == .light
+            ? UIColor(red: 0x21 / 255.0, green: 0x1e / 255.0, blue: 0x1a / 255.0, alpha: 1)
+            : UIColor(red: 0xe9 / 255.0, green: 0xe2 / 255.0, blue: 0xd4 / 255.0, alpha: 1) }
 
         override init(frame: CGRect) {
             super.init(frame: frame)
@@ -219,24 +222,15 @@ struct EdgeScrollStrip: UIViewRepresentable {
         }
 
         override func draw(_ rect: CGRect) {
+            // Hidden at rest; a 1 pt ink line (15 %) shows only while a finger
+            // is in the strip or VoiceOver scrolls.
             guard bounds.width > 0, bounds.height > 24, let context = UIGraphicsGetCurrentContext() else { return }
+            guard gesture.isContactActive || accessibilityFeedback, parent?.enabled == true else { return }
             let trackX = bounds.maxX - 12
-            let top: CGFloat = 14, bottom = bounds.maxY - 14
-            let engaged = gesture.isContactActive || accessibilityFeedback
-            let available = parent?.enabled == true
-            context.setLineCap(.round)
-            context.setLineWidth(2)
-            context.setStrokeColor(mint.withAlphaComponent(available ? 0.15 : 0.06).cgColor)
-            context.move(to: CGPoint(x: trackX, y: top))
-            context.addLine(to: CGPoint(x: trackX, y: bottom))
-            context.strokePath()
-            let thumbHeight = min(bottom - top, max(32, min(64, (bottom - top) * 0.15)))
-            let center = max(top + thumbHeight / 2, min(bottom - thumbHeight / 2, fingerY ?? bounds.midY))
-            context.setLineWidth(engaged ? 5 : 3)
-            context.setStrokeColor(mint.withAlphaComponent(available ? (engaged ? 0.95 : 0.42) : 0.12).cgColor)
-            if engaged { context.setShadow(offset: .zero, blur: 8, color: mint.withAlphaComponent(0.25).cgColor) }
-            context.move(to: CGPoint(x: trackX, y: center - thumbHeight / 2))
-            context.addLine(to: CGPoint(x: trackX, y: center + thumbHeight / 2))
+            context.setLineWidth(1)
+            context.setStrokeColor(ink.resolvedColor(with: traitCollection).withAlphaComponent(0.15).cgColor)
+            context.move(to: CGPoint(x: trackX, y: 14))
+            context.addLine(to: CGPoint(x: trackX, y: bounds.maxY - 14))
             context.strokePath()
         }
     }

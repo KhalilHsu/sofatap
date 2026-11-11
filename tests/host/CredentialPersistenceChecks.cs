@@ -10,6 +10,7 @@ internal static class CredentialPersistenceChecks
         const string virtualAddress = "198.51.100.20";
         const string replacementHomeAddress = "203.0.113.30";
         var directory = Path.Combine(Path.GetTempPath(), "sofatap-credentials-" + Guid.NewGuid().ToString("N"));
+        var path = Path.Combine(directory, "pairing.dat");
         try
         {
             string token; string fingerprint;
@@ -18,63 +19,53 @@ internal static class CredentialPersistenceChecks
                 token = credentials.Token; fingerprint = credentials.Fingerprint;
                 check(credentials.CertificateIPv4.Contains(homeAddress), "initial pairing certificate covers home address");
             }
-            var persisted = File.ReadAllBytes(Path.Combine(directory, "pairing.dat"));
-            using (var credentials = Credentials.LoadOrCreate(directory, [virtualAddress, homeAddress]))
+            var persisted = File.ReadAllBytes(path);
+            var stamp = File.GetLastWriteTimeUtc(path);
+            void Same(IReadOnlyCollection<string> addresses, string label)
             {
-                check(credentials.Token == token && credentials.Fingerprint == fingerprint,
-                    "new virtual adapter preserves saved pairing on the existing home network");
-                check(!credentials.CertificateIPv4.Contains(virtualAddress),
-                    "retained certificate does not claim an uncertified adapter address");
+                using (var credentials = Credentials.LoadOrCreate(directory, addresses))
+                    check(credentials.Token == token && credentials.Fingerprint == fingerprint, label);
+                check(File.ReadAllBytes(path).AsSpan().SequenceEqual(persisted) && File.GetLastWriteTimeUtc(path) == stamp,
+                    label + " (pairing.dat untouched)");
             }
-            check(File.ReadAllBytes(Path.Combine(directory, "pairing.dat")).AsSpan().SequenceEqual(persisted),
-                "unrelated adapter does not rewrite the stored pairing profile");
-            using (var credentials = Credentials.LoadOrCreate(directory, []))
-                check(credentials.Token == token && credentials.Fingerprint == fingerprint,
-                    "offline restart preserves pairing credentials");
-            using (var credentials = Credentials.LoadOrCreate(directory, [homeAddress]))
-                check(credentials.Token == token && credentials.Fingerprint == fingerprint,
-                    "returning to the original network keeps the pairing after an offline restart");
-            using (var credentials = Credentials.LoadOrCreate(directory, [virtualAddress]))
-            {
-                check(credentials.Token != token && credentials.Fingerprint != fingerprint,
-                    "complete address change still rotates both certificate and bearer token");
-                check(credentials.CertificateIPv4.Contains(virtualAddress) && !credentials.CertificateIPv4.Contains(homeAddress),
-                    "replacement certificate covers the new endpoint without retaining stale network addresses");
-                token = credentials.Token; fingerprint = credentials.Fingerprint;
-            }
-            using (var credentials = Credentials.LoadOrCreate(directory, [virtualAddress]))
-                check(credentials.Token == token && credentials.Fingerprint == fingerprint,
-                    "replacement pairing persists across the following receiver restart");
+            // Network changes only change what is advertised, never the identity.
+            Same([virtualAddress, homeAddress], "new virtual adapter keeps credentials");
+            Same([], "offline restart keeps credentials");
+            Same([virtualAddress], "complete address change keeps credentials");
+            Same([replacementHomeAddress], "home address replacement keeps credentials");
+            Same([virtualAddress, replacementHomeAddress], "VPN + replaced home address keeps credentials");
+            Same([homeAddress], "returning to the original network keeps credentials");
 
-            var overlappingDirectory = Path.Combine(directory, "overlapping-network");
-            using (var credentials = Credentials.LoadOrCreate(overlappingDirectory, [homeAddress, virtualAddress]))
-            {
-                token = credentials.Token; fingerprint = credentials.Fingerprint;
-            }
-            using (var credentials = Credentials.LoadOrCreate(overlappingDirectory, [virtualAddress]))
+            // A new Host build reuses an old pairing.dat written by the previous build:
+            // copy the bytes into a fresh profile, as an app update/replacement would.
+            var upgraded = Path.Combine(directory, "upgraded-host");
+            Directory.CreateDirectory(upgraded);
+            File.WriteAllBytes(Path.Combine(upgraded, "pairing.dat"), persisted);
+            using (var credentials = Credentials.LoadOrCreate(upgraded, [replacementHomeAddress]))
                 check(credentials.Token == token && credentials.Fingerprint == fingerprint,
-                    "pure removal of a certified address preserves pairing");
-            using (var credentials = Credentials.LoadOrCreate(overlappingDirectory, [virtualAddress, replacementHomeAddress]))
-            {
-                check(credentials.Token != token && credentials.Fingerprint != fingerprint,
-                    "home address replacement rotates credentials despite an unchanged VPN address");
-                check(credentials.CertificateIPv4.Contains(replacementHomeAddress)
-                    && credentials.CertificateIPv4.Contains(virtualAddress) && !credentials.CertificateIPv4.Contains(homeAddress),
-                    "replacement home address is certified while the stable VPN address remains available");
-            }
+                    "new Host on a different network reuses the old pairing.dat");
+            check(File.ReadAllBytes(Path.Combine(upgraded, "pairing.dat")).AsSpan().SequenceEqual(persisted),
+                "new Host does not rewrite the old pairing.dat");
 
-            var offlineDirectory = Path.Combine(directory, "initially-offline");
-            using (var credentials = Credentials.LoadOrCreate(offlineDirectory, []))
+            // Explicit reset is the user-facing way to rotate.
+            using (var credentials = Credentials.LoadOrCreate(directory, [homeAddress], resetPairing: true))
             {
+                check(credentials.Token != token && credentials.Fingerprint != fingerprint, "explicit reset rotates certificate and token");
                 token = credentials.Token; fingerprint = credentials.Fingerprint;
             }
-            using (var credentials = Credentials.LoadOrCreate(offlineDirectory, [homeAddress]))
-            {
-                check(credentials.Token != token && credentials.Fingerprint != fingerprint,
-                    "initially offline profile renews when its first network address appears");
-                check(credentials.CertificateIPv4.Contains(homeAddress),
-                    "first online certificate covers the endpoint for strict TLS validation");
-            }
+            using (var credentials = Credentials.LoadOrCreate(directory, [virtualAddress]))
+                check(credentials.Token == token && credentials.Fingerprint == fingerprint, "reset pairing persists across restart");
+
+            // Corrupt profile: regenerate, keep a diagnostic copy.
+            var corrupt = Path.Combine(directory, "corrupt");
+            Directory.CreateDirectory(corrupt);
+            File.WriteAllText(Path.Combine(corrupt, "pairing.dat"), "{not json");
+            using (var credentials = Credentials.LoadOrCreate(corrupt, [homeAddress]))
+                check(credentials.Token.Length == 43 && credentials.Certificate.HasPrivateKey, "corrupt pairing.dat is regenerated");
+            check(Directory.GetFiles(corrupt, "pairing.dat.corrupt-*").Length == 1, "corrupt pairing.dat is kept for diagnosis");
+            File.WriteAllText(Path.Combine(corrupt, "pairing.dat"), "{\"Token\":\"short\",\"Pfx\":\"AA==\"}");
+            using (var credentials = Credentials.LoadOrCreate(corrupt, [homeAddress]))
+                check(credentials.Token.Length == 43, "invalid token in pairing.dat is regenerated");
         }
         finally { Directory.Delete(directory, true); }
     }

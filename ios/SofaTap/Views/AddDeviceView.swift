@@ -44,7 +44,7 @@ struct AddDeviceView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        SofaNavigationStack {
             GeometryReader { geometry in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 22) {
@@ -52,7 +52,7 @@ struct AddDeviceView: View {
                         else if let candidate { connection(candidate) }
                         else { scanPage(cameraHeight: max(210, min(340, geometry.size.height * 0.47))) }
                     }.padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 24)
-                }.scrollDismissesKeyboard(.interactively)
+                }.sofaScrollDismissesKeyboard()
             }
             .background(Palette.background)
             .navigationTitle(addedDevice == nil ? String(localized: "扫描二维码") : String(localized: "设备已添加"))
@@ -65,7 +65,7 @@ struct AddDeviceView: View {
                     }.disabled(addedDevice != nil && draftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .navigationDestination(isPresented: $showWebOS) {
+            .sofaDestination(isPresented: $showWebOS) {
                 TVPairingView(tv: tv, selectTV: selectTV, finishPairing: finishWebOS,
                               completionTitle: String(localized: "继续"))
             }
@@ -79,10 +79,10 @@ struct AddDeviceView: View {
                 }
 #endif
             }
-            .onChange(of: incomingLink) { _, _ in consumeIncomingLink() }
-            .onChange(of: model.connected) { _, _ in completeIfConnected() }
-            .onChange(of: androidTV.phase) { _, _ in completeIfConnected() }
-            .onChange(of: scenePhase) { _, phase in
+            .onChangeCompat(of: incomingLink) { _, _ in consumeIncomingLink() }
+            .onChangeCompat(of: model.connected) { _, _ in completeIfConnected() }
+            .onChangeCompat(of: androidTV.phase) { _, _ in completeIfConnected() }
+            .onChangeCompat(of: scenePhase) { _, phase in
                 if phase == .active && candidate == nil && addedDevice == nil {
                     cameraError = nil; cameraID = UUID()
                 }
@@ -126,7 +126,7 @@ struct AddDeviceView: View {
             .frame(height: cameraHeight).clipShape(RoundedRectangle(cornerRadius: 26))
             .accessibilityIdentifier("pairingCameraRegion")
             Text(String(localized: "将 Sofatap 配对二维码放入画面"))
-                .font(.subheadline.weight(.medium)).multilineTextAlignment(.center)
+                .sofaTextStyle(.subheadline, weight: .medium).multilineTextAlignment(.center)
             Text(String(localized: "扫描后自动识别电脑或电视，无需选择设备类型。"))
                 .font(.footnote).foregroundStyle(Palette.muted).multilineTextAlignment(.center)
         }
@@ -151,7 +151,7 @@ struct AddDeviceView: View {
             Divider().overlay(Palette.muted.opacity(0.12))
             HStack {
                 Label { Text(verbatim: "Android TV / Google TV") } icon: { Image(systemName: "tv") }
-                    .font(.subheadline.weight(.medium))
+                    .sofaTextStyle(.subheadline, weight: .medium)
                 Spacer(minLength: 4)
                 Text(String(localized: "实验版")).font(.caption).foregroundStyle(Palette.muted)
             }
@@ -159,7 +159,7 @@ struct AddDeviceView: View {
                 .font(.footnote).foregroundStyle(Palette.muted)
             Divider().overlay(Palette.muted.opacity(0.12))
             HStack {
-                Text(verbatim: "LG webOS").font(.subheadline.weight(.medium))
+                Text(verbatim: "LG webOS").sofaTextStyle(.subheadline, weight: .medium)
                 Spacer()
                 Button(String(localized: "手动连接 LG webOS")) { showWebOS = true }
                     .font(.caption).frame(minHeight: 44)
@@ -171,16 +171,16 @@ struct AddDeviceView: View {
     private func platformBadge(_ name: String, symbol: String) -> some View {
         VStack(spacing: 8) {
             Image(systemName: symbol).font(.system(size: 24)).foregroundStyle(Palette.mint)
-            Text(verbatim: name).font(.subheadline.weight(.medium))
+            Text(verbatim: name).sofaTextStyle(.subheadline, weight: .medium)
         }.frame(maxWidth: .infinity).padding(.vertical, 8)
     }
 
     private var pasteSheet: some View {
-        NavigationStack {
+        SofaNavigationStack {
             VStack(alignment: .leading, spacing: 18) {
                 Text(String(localized: "或粘贴完整配对链接")).foregroundStyle(Palette.muted)
-                TextField("sofatap://…", text: $pastedLink, axis: .vertical)
-                    .lineLimit(3...6).font(.caption.monospaced()).textInputAutocapitalization(.never)
+                SofaVerticalTextField(prompt: "sofatap://…", text: $pastedLink, limit: 6)
+                    .sofaMonospacedCaption().textInputAutocapitalization(.never)
                     .autocorrectionDisabled().privacySensitive()
                     .padding(16).background(Palette.panel, in: RoundedRectangle(cornerRadius: 16))
                     .accessibilityIdentifier("pairingLink")
@@ -194,7 +194,7 @@ struct AddDeviceView: View {
                 .toolbar { ToolbarItem(placement: .cancellationAction) {
                     Button(String(localized: "取消")) { pastedLink = ""; showPaste = false }
                 } }
-        }.presentationDetents([.medium, .large])
+        }.sofaSheet(.mediumLarge, indicator: false)
     }
 
     private func connection(_ code: PairingCode) -> some View {
@@ -203,7 +203,7 @@ struct AddDeviceView: View {
             Image(systemName: failed ? "exclamationmark.circle" : "checkmark.viewfinder")
                 .font(.system(size: 42)).foregroundStyle(failed ? .orange : Palette.mint)
             Text(failed ? String(localized: "连接未完成") : String(localized: "正在添加设备…"))
-                .font(.title2.weight(.semibold))
+                .sofaTextStyle(.title2, weight: .semibold)
             Label(String(localized: "已自动识别"), systemImage: "checkmark.circle").font(.caption).foregroundStyle(Palette.muted)
             Text(candidateName(code)).font(.headline)
             Text(candidatePlatform(code)).font(.subheadline).foregroundStyle(Palette.mint)
@@ -222,7 +222,7 @@ struct AddDeviceView: View {
     private func naming(_ device: AddedDevice) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             Image(systemName: "checkmark.circle.fill").font(.system(size: 48)).foregroundStyle(Palette.mint)
-            Text(String(localized: "给设备起个名字")).font(.title2.weight(.semibold))
+            Text(String(localized: "给设备起个名字")).sofaTextStyle(.title2, weight: .semibold)
             Text(verbatim: device.platform).font(.subheadline).foregroundStyle(Palette.muted)
             TextField(String(localized: "设备名称"), text: $draftName)
                 .font(.title3).submitLabel(.done).autocorrectionDisabled()

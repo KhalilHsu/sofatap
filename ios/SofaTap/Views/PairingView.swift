@@ -24,7 +24,7 @@ struct PairingView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        SofaNavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     savedDevices
@@ -65,17 +65,16 @@ struct PairingView: View {
                 AddDeviceView(model: model, tv: tv, androidTV: androidTV,
                               selectAndroidTV: selectAndroidTV, selectTV: selectTV, selectComputer: selectComputer,
                               incomingLink: $incomingLink, finishPairing: { showingAddDevice = false; dismiss() })
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
+                    .sofaSheet(.large)
             }
-            .onChange(of: incomingLink) { _, link in if link != nil { showingAddDevice = true } }
+            .onChangeCompat(of: incomingLink) { _, link in if link != nil { showingAddDevice = true } }
             .onDisappear { model.stopPeerAvailabilityMonitoring() }
-            .onChange(of: scenePhase) { _, phase in
+            .onChangeCompat(of: scenePhase) { _, phase in
                 if phase == .active { model.startPeerAvailabilityMonitoring() }
                 else { model.stopPeerAvailabilityMonitoring() }
             }
-            .onChange(of: model.pairing) { _, _ in model.startPeerAvailabilityMonitoring() }
-            .onChange(of: model.desktopControlEnabled) { _, _ in model.startPeerAvailabilityMonitoring() }
+            .onChangeCompat(of: model.pairing) { _, _ in model.startPeerAvailabilityMonitoring() }
+            .onChangeCompat(of: model.desktopControlEnabled) { _, _ in model.startPeerAvailabilityMonitoring() }
             .onAppear {
                 model.startPeerAvailabilityMonitoring()
                 if incomingLink != nil { showingAddDevice = true }

@@ -502,3 +502,56 @@
 "松手取消" = "Loslassen zum Abbrechen";
 "轻点发送，左右滑动查看更多" = "Tippen zum Senden, wischen für mehr";
 "左右分区双击，长按快捷键，双击按住拖动。" = "Doppeltippen nach Hälfte, langes Drücken für Kurzbefehle, Doppeltippen und Halten zum Ziehen.";
+/* Temporary gyro air mouse. */
+"陀螺空鼠" = "Gyro-Luftmaus";
+"暂时入口" = "Vorläufiger Einstieg";
+"回中" = "Zentrieren";
+"按住石子移动光标，松手立刻停止。轻点单击。" = "Halte den Stein, um den Zeiger zu bewegen. Loslassen stoppt sofort. Kurzes Tippen klickt.";
+"选择电视屏幕" = "TV-Bildschirm wählen";
+"主屏幕" = "Hauptbildschirm";
+"灵敏度" = "Empfindlichkeit";
+"慢" = "Langsam";
+"快" = "Schnell";
+"手腕转一点，光标走多远" = "Wie weit der Zeiger bei einer kleinen Drehung des Handgelenks wandert";
+"触控板" = "Trackpad";
+"连接 Mac 后可用" = "Verfügbar nach Verbindung mit einem Mac";
+"横划右键" = "Wischen für Rechtsklick";
+"右键按住时长" = "Rechtsklick-Haltedauer";
+"按住石子移动光标，松手停止，轻点单击" = "Stein halten, um den Zeiger zu bewegen. Loslassen stoppt. Tippen klickt.";
+"按住移动 · 轻点单击" = "Halten zum Bewegen · Tippen klickt";
+"电视屏幕" = "Fernsehbildschirm";
+/* Air mouse device menu and shake recenter. */
+"光标回中" = "Zeiger zentrieren";
+"设备与配对" = "Geräte und Kopplung";
+"灵敏度与手势" = "Empfindlichkeit und Gesten";
+"摇一摇回中" = "Schütteln zum Zentrieren";
+"手指离开屏幕时摇一下手机，光标回到屏幕中间" = "Ohne Finger auf dem Display das Telefon schütteln, um den Zeiger in die Mitte zu bringen";
+/* 枯山水 device sheet and surface tabs. */
+"设备" = "Geräte";
+"触控" = "Trackpad";
+"空鼠" = "Air-Mouse";
+"或摇一摇" = "oder schütteln";
+"添加或配对设备" = "Gerät hinzufügen oder koppeln";
+"仅支持触控板" = "Nur Trackpad";
+/* 枯山水 stone names and settings row. */
+"设置" = "Einstellungen";
+"玄武岩" = "Basalt";
+"花岗岩" = "Granit";
+"辉长岩" = "Gabbro";
+"板岩" = "Schiefer";
+"绿岩" = "Grünstein";
+/* Air mouse two-finger scroll hint and guide card. */
+"两指上下滑 · 滚动" = "Mit zwei Fingern wischen · Scrollen";
+"按住石子挥动手机，光标大幅移动；按住时单指在石子上滑动，光标精细移动。双指上下滑动滚动页面。轻点单击，轻点两下双击，按住不动右键，轻点后按住拖动。" = "Stein halten und das Telefon schwenken für große Zeigerbewegungen; beim Halten mit einem Finger über den Stein gleiten für feine Bewegungen. Mit zwei Fingern nach oben oder unten wischen zum Scrollen. Tippen zum Klicken, zweimal tippen für Doppelklick, still halten für Rechtsklick, tippen und dann halten zum Ziehen.";
+/* Explicit text delivery hints. */
+"没有送到电脑" = "Nicht beim Computer angekommen";
+"电脑上没有可输入的位置，请先点一下输入框" = "Kein Textfeld aktiv. Klicke zuerst in ein Textfeld";
+"连接断了一下，不确定电脑收到没有" = "Kurz getrennt. Evtl. schon angekommen";
+"重试" = "Nochmal";
+"已上屏" = "Ist da";
+"再发一次" = "Neu senden";
+
+/* Re-pair screen: English fallback on purpose; only zh-Hans and en are maintained. */
+"需要重新配对" = "Pair again";
+"在 Mac 上打开 Sofatap，扫一下屏幕上的二维码" = "Open Sofatap on your Mac and scan the code on screen.";
+"扫码配对" = "Scan to pair";

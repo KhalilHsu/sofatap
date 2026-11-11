@@ -11,7 +11,10 @@ xcrun --sdk macosx swiftc -parse-as-library -swift-version 5 \
     -target "$(uname -m)-apple-ios17.0-macabi" -sdk "$LIVE_SDK" \
     -F "$LIVE_SDK/System/iOSSupport/System/Library/Frameworks" \
     -I "$LIVE_SDK/System/iOSSupport/usr/include" \
+    "$REPO_ROOT/ios/SofaTap/Core/SofaClock.swift" \
     "$REPO_ROOT/ios/SofaTap/Core/ControllerModel.swift" \
+    "$REPO_ROOT/ios/SofaTap/Core/AirMouseMotion.swift" \
+    "$REPO_ROOT/ios/SofaTap/Core/AirMouseCardGesture.swift" \
     "$REPO_ROOT/ios/SofaTap/Core/PeerTransportDiscovery.swift" \
     "$REPO_ROOT/ios/SofaTap/Core/PeerTLSBridge.swift" \
     "$REPO_ROOT/ios/SofaTap/Core/SavedDevice.swift" \

@@ -8,9 +8,8 @@ struct SofaTapApp: App {
     var body: some Scene {
         WindowGroup {
             RemoteView(model: controller)
-                .preferredColorScheme(.dark)
                 .tint(Palette.mint)
-                .onChange(of: scenePhase) { _, phase in
+                .onChangeCompat(of: scenePhase) { _, phase in
                     if phase == .active { controller.becameActive() }
                     else if phase == .background { controller.becameInactive() }
                     else { controller.pauseInput() }
@@ -20,9 +19,11 @@ struct SofaTapApp: App {
 }
 
 enum Palette {
-    static let background = Color(red: 0.039, green: 0.051, blue: 0.067)
-    static let panel = Color(red: 0.079, green: 0.098, blue: 0.122)
-    static let elevated = Color(red: 0.110, green: 0.137, blue: 0.165)
-    static let mint = Color(red: 0.722, green: 0.953, blue: 0.816)
-    static let muted = Color(red: 0.60, green: 0.65, blue: 0.69)
+    // 枯山水 tokens (light and dark). `mint` keeps its name but is the single
+    // accent, so older screens follow the new palette.
+    static let background = Kare.sand
+    static let panel = Kare.surface
+    static let elevated = Color(Kare.ui(dark: 0x29251F, light: 0xD2CABA))
+    static let mint = Kare.accent
+    static let muted = Kare.mute
 }

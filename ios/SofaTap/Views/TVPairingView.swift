@@ -12,7 +12,7 @@ struct TVPairingView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 Label(String(localized: "LG webOS 电视"), systemImage: "tv")
-                    .font(.title2.weight(.semibold)).foregroundStyle(Palette.mint)
+                    .sofaTextStyle(.title2, weight: .semibold).foregroundStyle(Palette.mint)
                 Text(String(localized: "电视遥控预览：手机与电视连接同一家庭网络。在电视网络设置中查看 IP 地址，连接后用电视遥控器允许配对。"))
                     .foregroundStyle(Palette.muted)
                 TextField("192.168.1.20", text: $address)
@@ -24,7 +24,7 @@ struct TVPairingView: View {
                 if tv.phase == .trust {
                     Text(String(localized: "确认这是你要配对的电视，并且正在使用信任的家庭网络。继续后需要在电视上允许连接。"))
                     DisclosureGroup(String(localized: "查看连接指纹")) {
-                        Text(tv.certificate ?? "").font(.caption.monospaced()).textSelection(.enabled)
+                        Text(tv.certificate ?? "").sofaMonospacedCaption().textSelection(.enabled)
                     }
                     Button(String(localized: "继续并在电视上确认")) { tv.trustAndPair() }
                         .buttonStyle(.borderedProminent).foregroundStyle(Palette.background)

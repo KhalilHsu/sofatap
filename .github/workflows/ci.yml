@@ -91,6 +91,13 @@ jobs:
         run: |
           swiftc ios/SofaTap/Core/ReceiverState.swift tests/ReceiverStateTests.swift -o "$RUNNER_TEMP/sofatap-receiver-tests"
           "$RUNNER_TEMP/sofatap-receiver-tests"
+      - name: Air-mouse filter and display mapping without device motion
+        shell: bash
+        run: |
+          swiftc ios/SofaTap/Core/AirMouseMotion.swift tests/AirMouseMotionTests.swift -o "$RUNNER_TEMP/sofatap-air-mouse-tests"
+          "$RUNNER_TEMP/sofatap-air-mouse-tests"
+          swiftc ios/SofaTap/Core/AirMouseCardGesture.swift tests/AirMouseCardGestureTests.swift -o "$RUNNER_TEMP/sofatap-air-mouse-card-tests"
+          "$RUNNER_TEMP/sofatap-air-mouse-card-tests"
       - name: Single-screen touch gestures without desktop input
         shell: bash
         run: |

@@ -5,8 +5,8 @@ set -euo pipefail
 IOS_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_MODE="${1:-simulator}"
 case "$BUILD_MODE" in
-  simulator) BUILD_SDK=iphonesimulator; BUILD_TARGET=arm64-apple-ios17.0-simulator; BUILD_PLATFORM=iPhoneSimulator ;;
-  device) BUILD_SDK=iphoneos; BUILD_TARGET=arm64-apple-ios17.0; BUILD_PLATFORM=iPhoneOS ;;
+  simulator) BUILD_SDK=iphonesimulator; BUILD_TARGET=arm64-apple-ios15.0-simulator; BUILD_PLATFORM=iPhoneSimulator ;;
+  device) BUILD_SDK=iphoneos; BUILD_TARGET=arm64-apple-ios15.0; BUILD_PLATFORM=iPhoneOS ;;
   *) printf 'Usage: %s [simulator|device]\n' "$0" >&2; exit 2 ;;
 esac
 BUILD_SDK_PATH="$(xcrun --sdk "$BUILD_SDK" --show-sdk-path)"
@@ -55,7 +55,7 @@ data.update({
     'CFBundleExecutable': 'SofaTap', 'CFBundleShortVersionString': version,
     'CFBundleVersion': build, 'CFBundleSupportedPlatforms': [platform],
     'CFBundleDevelopmentRegion': 'en',
-    'DTPlatformName': sdk, 'MinimumOSVersion': '17.0', 'UIDeviceFamily': device_family,
+    'DTPlatformName': sdk, 'MinimumOSVersion': '15.0', 'UIDeviceFamily': device_family,
     'CFBundleIcons': {'CFBundlePrimaryIcon': {'CFBundleIconFiles': ['AppIcon60x60'], 'UIPrerenderedIcon': False}},
     'CFBundleIcons~ipad': {'CFBundlePrimaryIcon': {'CFBundleIconFiles': ['AppIcon76x76', 'AppIcon83.5x83.5'], 'UIPrerenderedIcon': False}}
 })

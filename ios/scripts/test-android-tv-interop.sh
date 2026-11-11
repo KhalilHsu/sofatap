@@ -63,6 +63,7 @@ INTEROP_SOURCE="$REPO_ROOT/android/receiver/src/main/java/com/chekusu/sofatap/tv
     "$REPO_ROOT/android/receiver/src/test/java/com/chekusu/sofatap/tv/AndroidTVInteropFixture.java"
 xcrun --sdk macosx swiftc -parse-as-library -swift-version 5 \
     -target "$(uname -m)-apple-macosx14.0" \
+    "$REPO_ROOT/ios/SofaTap/Core/SofaClock.swift" \
     "$REPO_ROOT/ios/SofaTap/Core/SavedDevice.swift" \
     "$REPO_ROOT/ios/SofaTap/Core/Pairing.swift" \
     "$REPO_ROOT/ios/SofaTap/Core/TV/"AndroidTV*.swift \

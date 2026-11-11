@@ -25,7 +25,7 @@ struct AndroidTVNavigationPad: UIViewRepresentable {
         private let hints = UIView()
         private let centerDot = UIView()
         private var arrows: [AndroidTVKey: UIImageView] = [:]
-        private let mint = UIColor(red: 0.722, green: 0.953, blue: 0.816, alpha: 1)
+        private let mint = UIColor(red: 0.831, green: 0.529, blue: 0.290, alpha: 1)
         private var lastBounds = CGRect.zero
         override init(frame: CGRect) {
             super.init(frame: frame)
@@ -117,7 +117,7 @@ struct AndroidTVDirectionButtons: View {
     @ObservedObject var tv: AndroidTVController
     @Environment(\.dismiss) private var dismiss
     var body: some View {
-        NavigationStack {
+        SofaNavigationStack {
             VStack(spacing: 8) {
                 key(.up, "chevron.up", String(localized: "向上"))
                 HStack(spacing: 8) {
@@ -154,7 +154,7 @@ struct AndroidTVRemoteSetupView: View {
     private var navigation: AndroidTVControls.NavigationStatus? { tv.status?.tvControls?.navigationStatus }
     private var validCode: Bool { code.utf8.count == 6 && code.utf8.allSatisfy { (48...57).contains($0) || (65...70).contains($0) || (97...102).contains($0) } }
     var body: some View {
-        NavigationStack {
+        SofaNavigationStack {
             Form {
                 Section {
                     Text(String(localized: "连接后，方向键和确认键会像电视遥控器一样工作。光标模式仍可单独使用。"))
@@ -182,8 +182,8 @@ struct AndroidTVRemoteSetupView: View {
             }
             .navigationTitle(String(localized: "连接电视遥控"))
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button(String(localized: "完成")) { dismiss() } } }
-            .onChange(of: tv.inputFeedback) { _, _ in submitted = false }
-            .onChange(of: navigation) { _, state in
+            .onChangeCompat(of: tv.inputFeedback) { _, _ in submitted = false }
+            .onChangeCompat(of: navigation) { _, state in
                 submitted = false
                 if state == .ready { code = ""; dismiss() }
             }
