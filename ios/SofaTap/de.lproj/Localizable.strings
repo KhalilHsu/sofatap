@@ -546,7 +546,7 @@
 /* Explicit text delivery hints. */
 "没有送到电脑" = "Nicht beim Computer angekommen";
 "电脑上没有可输入的位置，请先点一下输入框" = "Kein Textfeld aktiv. Klicke zuerst in ein Textfeld";
-"连接断了一下，不确定电脑收到没有" = "Die Verbindung war kurz weg. Unklar, ob der Computer es erhalten hat";
+"连接断了一下，不确定电脑收到没有" = "Kurz getrennt. Evtl. schon angekommen";
 "重试" = "Nochmal";
 "已上屏" = "Ist da";
 "再发一次" = "Neu senden";

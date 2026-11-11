@@ -279,27 +279,23 @@ struct KareSheetRow<Trailing: View>: View {
 
 /// Delivery hint under the composer: the message wraps to at most two lines and
 /// truncates with an ellipsis; the accent text actions stay one line at full size.
+/// With two actions (the uncertain state), if the message would need more than two
+/// lines beside them, the actions move as a group to their own right-aligned line
+/// below and the message takes the full width.
 struct DeliveryNoticeRow: View {
     struct Action { let title: String; let identifier: String; let run: () -> Void }
     let message: String
     let font: Font
     let actions: [Action]
     var disabled = false
-    var body: some View {
+
+    private var buttons: some View {
         HStack(alignment: .firstTextBaseline, spacing: 14) {
-            Text(message)
-                .font(font)
-                .foregroundStyle(Kare.mute)
-                .lineLimit(2)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityIdentifier("textDeliveryStatus")
             ForEach(actions, id: \.identifier) { action in
                 Button(action.title, action: action.run)
                     .font(font.weight(.semibold))
                     .lineLimit(1)
                     .fixedSize()
-                    .layoutPriority(1)
                     .foregroundStyle(Kare.accent)
                     .buttonStyle(.plain)
                     .frame(minHeight: 44)
@@ -308,7 +304,72 @@ struct DeliveryNoticeRow: View {
                     .accessibilityIdentifier(action.identifier)
             }
         }
+        .fixedSize()
+    }
+    private var label: some View {
+        Text(message)
+            .font(font)
+            .foregroundStyle(Kare.mute)
+            .lineLimit(2)
+            .truncationMode(.tail)
+            .accessibilityIdentifier("textDeliveryStatus")
+    }
+
+    var body: some View {
+        Group {
+            if actions.count >= 2 {
+                NoticeWrapLayout(spacing: 14) {
+                    Text(message).font(font).lineLimit(nil).fixedSize(horizontal: false, vertical: true).hidden().accessibilityHidden(true)
+                    Text("Ag").font(font).lineLimit(1).fixedSize().hidden().accessibilityHidden(true)
+                    label
+                    buttons
+                }
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 14) {
+                    label.frame(maxWidth: .infinity, alignment: .leading)
+                    buttons.layoutPriority(1)
+                }
+            }
+        }
         .padding(.horizontal, 6)
         .padding(.top, 8)
+    }
+}
+
+/// Subviews: [unlimited measuring text (hidden), one-line reference (hidden), label, buttons].
+struct NoticeWrapLayout: Layout {
+    var spacing: CGFloat
+    struct Plan { var inline: Bool; var labelSize: CGSize; var buttonSize: CGSize }
+    func plan(_ width: CGFloat, _ subviews: Subviews) -> Plan {
+        let buttonSize = subviews[3].sizeThatFits(.unspecified)
+        let lineHeight = max(1, subviews[1].sizeThatFits(.unspecified).height)
+        let inlineWidth = max(0, width - buttonSize.width - spacing)
+        let needed = subviews[0].sizeThatFits(ProposedViewSize(width: inlineWidth, height: nil)).height
+        let lines = Int((needed / lineHeight).rounded())
+        if lines <= 2 {
+            return Plan(inline: true, labelSize: subviews[2].sizeThatFits(ProposedViewSize(width: inlineWidth, height: nil)), buttonSize: buttonSize)
+        }
+        return Plan(inline: false, labelSize: subviews[2].sizeThatFits(ProposedViewSize(width: width, height: nil)), buttonSize: buttonSize)
+    }
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? 320
+        let p = plan(width, subviews)
+        return p.inline ? CGSize(width: width, height: max(p.labelSize.height, p.buttonSize.height))
+                        : CGSize(width: width, height: p.labelSize.height + p.buttonSize.height)
+    }
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let p = plan(bounds.width, subviews)
+        subviews[0].place(at: bounds.origin, proposal: .zero)
+        subviews[1].place(at: bounds.origin, proposal: .zero)
+        if p.inline {
+            // Buttons are 44pt tall; centre the first text line on them like the HStack baseline does.
+            let labelY = bounds.minY + max(0, (p.buttonSize.height - p.labelSize.height) / 2)
+            subviews[2].place(at: CGPoint(x: bounds.minX, y: p.labelSize.height > p.buttonSize.height ? bounds.minY : labelY),
+                              proposal: ProposedViewSize(width: p.labelSize.width, height: p.labelSize.height))
+            subviews[3].place(at: CGPoint(x: bounds.maxX - p.buttonSize.width, y: bounds.minY), proposal: .unspecified)
+        } else {
+            subviews[2].place(at: bounds.origin, proposal: ProposedViewSize(width: bounds.width, height: p.labelSize.height))
+            subviews[3].place(at: CGPoint(x: bounds.maxX - p.buttonSize.width, y: bounds.minY + p.labelSize.height), proposal: .unspecified)
+        }
     }
 }
