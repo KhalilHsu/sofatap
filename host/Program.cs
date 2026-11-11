@@ -2,7 +2,7 @@ using SofaTap;
 
 if (args.Contains("--help", StringComparer.Ordinal))
 {
-    Console.WriteLine("Sofatap receiver backend\nLaunch the native Sofatap desktop app to pair.\n  --native-ui          Private stdin/stdout bridge for the native desktop app\n  --dry-run            Validate transport without injecting input\n  --data-dir <path>    Store pairing credentials in a separate profile\n  --port <n>           TLS control endpoint (default 53319)");
+    Console.WriteLine("Sofatap receiver backend\nLaunch the native Sofatap desktop app to pair.\n  --native-ui          Private stdin/stdout bridge for the native desktop app\n  --dry-run            Validate transport without injecting input\n  --data-dir <path>    Store pairing credentials in a separate profile\n  --port <n>           TLS control endpoint (default 53319)\n  --reset-pairing      Discard the saved pairing and create a new QR identity");
     return;
 }
 try
@@ -29,7 +29,8 @@ try
         throw new InvalidOperationException("Sofatap requires Windows, macOS or a supported Linux desktop.");
     var options = new ReceiverOptions(dryRun, ReceiverDistribution.DataDirectory(Value("--data-dir")),
         Port("--port", Port("--control-port", 53319)));
-    using var credentials = Credentials.LoadOrCreate(Path.GetFullPath(options.DataDirectory));
+    using var credentials = Credentials.LoadOrCreate(Path.GetFullPath(options.DataDirectory),
+        args.Contains("--reset-pairing", StringComparer.Ordinal));
     IInputInjector input = dryRun ? new DryRunInput() : OperatingSystem.IsMacOS() ? new MacInput()
         : OperatingSystem.IsLinux() ? new LinuxInput() : new WindowsInput();
     using var inputLifetime = input as IDisposable;

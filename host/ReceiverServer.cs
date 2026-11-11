@@ -242,8 +242,9 @@ public sealed class ReceiverServer(ReceiverOptions options, Credentials credenti
     }
     private string[] LocalAddresses()
     {
-        var certificateAddresses = credentials.CertificateIPv4.ToHashSet(StringComparer.Ordinal);
-        var addresses = NetworkAddresses.LocalIPv4().Where(certificateAddresses.Contains).ToArray();
-        return addresses;
+        // Phones authenticate the receiver by its pinned leaf fingerprint, not by
+        // the hostname/IP SAN, so every current address can be offered without
+        // rotating the paired identity when the network changes.
+        return NetworkAddresses.LocalIPv4();
     }
 }

@@ -50,7 +50,12 @@ try
     using var peerCredentials = Credentials.LoadOrCreate(peerProfile, Array.Empty<string>());
     var peerServer = new ReceiverServer(new(true, peerProfile, 53319), peerCredentials, new DryRunInput());
     using var peerState = JsonDocument.Parse(JsonSerializer.Serialize(peerServer.NativeState()));
-    Check(peerState.RootElement.GetProperty("pairings").GetArrayLength() == 0, "peer fixture has no LAN pairing address");
+    // Pairing QR addresses follow the current NICs even when the certificate was
+    // created offline; the phone pins the leaf, so no SAN filter is needed.
+    var qrHosts = peerState.RootElement.GetProperty("pairings").EnumerateArray().Select(item => item.GetProperty("host").GetString()).ToArray();
+    Check(qrHosts.SequenceEqual(NetworkAddresses.LocalIPv4()), "QR addresses follow current NICs, not certificate SANs");
+    Check(peerState.RootElement.GetProperty("pairings").EnumerateArray().All(item => item.GetProperty("uri").GetString()!.Contains(peerCredentials.Fingerprint)),
+        "every advertised QR carries the unchanged pinned fingerprint");
     var peerIdentity = peerState.RootElement.GetProperty("peer");
     Check(peerIdentity.GetProperty("port").GetInt32() == 53319 &&
         peerIdentity.GetProperty("fingerprint").GetString() == peerCredentials.Fingerprint,

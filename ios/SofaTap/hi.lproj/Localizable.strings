@@ -548,3 +548,8 @@
 "重试" = "फिर से कोशिश करें";
 "已上屏" = "दिख गया";
 "再发一次" = "फिर से भेजें";
+
+/* Re-pair screen: English fallback on purpose; only zh-Hans and en are maintained. */
+"需要重新配对" = "Pair again";
+"在 Mac 上打开 Sofatap，扫一下屏幕上的二维码" = "Open Sofatap on your Mac and scan the code on screen.";
+"扫码配对" = "Scan to pair";

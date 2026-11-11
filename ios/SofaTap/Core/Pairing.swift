@@ -121,7 +121,7 @@ enum PairingStore {
     static func delete() { if let id = try? store.read().selectedID { try? remove(id) } }
 }
 
-/// Trust is limited to the exact paired host, port and DER leaf fingerprint.
+/// Trust is limited to the exact paired endpoint and DER leaf fingerprint (pinning).
 /// The scanned certificate becomes an anchor for this challenge only, never a system CA.
 final class PinnedSessionDelegate: NSObject, URLSessionTaskDelegate {
     private let pairing: Pairing
@@ -163,7 +163,10 @@ final class PinnedSessionDelegate: NSObject, URLSessionTaskDelegate {
             reject("TLS_PIN")
             return
         }
-        let policyResult = SecTrustSetPolicies(trust, SecPolicyCreateSSL(true, pairing.host as CFString))
+        // Identity is the pinned DER leaf above. The receiver keeps one certificate
+        // across network changes, so its IP SANs may be stale; skip the hostname
+        // check (nil) but still require a valid, unexpired server certificate.
+        let policyResult = SecTrustSetPolicies(trust, SecPolicyCreateSSL(true, nil))
         let anchorResult = SecTrustSetAnchorCertificates(trust, [leaf] as CFArray)
         let anchorsOnlyResult = SecTrustSetAnchorCertificatesOnly(trust, true)
         guard policyResult == errSecSuccess, anchorResult == errSecSuccess, anchorsOnlyResult == errSecSuccess else {

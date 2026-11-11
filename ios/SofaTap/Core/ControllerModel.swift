@@ -35,6 +35,18 @@ final class ControllerModel: ObservableObject {
     @Published private(set) var computerName = String(localized: "客厅电脑")
     @Published var notice = String(localized: "配对一次，坐下来就能控制电脑。")
     @Published var pairingError: String?
+    /// The receiver explicitly refused this pairing (pinned certificate changed or
+    /// token rejected). Ordinary network loss never sets this; it keeps reconnecting.
+    @Published private(set) var repairNeededFor: UUID?
+    @Published private(set) var demoRepair = false
+    var needsRepairing: Bool {
+        desktopControlEnabled && (demoRepair || (repairNeededFor != nil && repairNeededFor == selectedDeviceID))
+    }
+    /// Only an explicit credential refusal means "pair again"; TLS errors such as
+    /// an expired certificate keep their diagnostic message.
+    nonisolated static func credentialsRejected(diagnostic: String?, status: Int?) -> Bool {
+        diagnostic == "TLS_PIN" || status == 401
+    }
     private var draftDefaults: UserDefaults? = .standard
     @Published var draft: String {
         didSet {
@@ -257,6 +269,10 @@ final class ControllerModel: ObservableObject {
         }
     }
     var testConnectionGeneration: UUID { generation }
+    /// Same path as a real WebSocket receive failure.
+    func testTransportError(_ error: Error = URLError(.cancelled), diagnostic: String?, status: Int?) {
+        transportError(error, diagnostic: diagnostic, status: status, closeCode: .invalid, generation: generation)
+    }
     func testTransportFailure(retryable: Bool = true, generation: UUID? = nil) {
         transportFailed(message: "test transport failure", retryable: retryable, generation: generation ?? self.generation)
     }
@@ -342,6 +358,7 @@ final class ControllerModel: ObservableObject {
                 }
                 notice = ""
             }
+            demoRepair = demoArguments.contains("--demo-repair")
             if ProcessInfo.processInfo.arguments.contains("--demo-devices") {
                 var library = DeviceLibrary<Pairing>()
                 let fixtures = ProcessInfo.processInfo.arguments.contains("--demo-devices-zh")
@@ -596,6 +613,7 @@ final class ControllerModel: ObservableObject {
             computerName = savedDevices.first { $0.id == selectedDeviceID }?.reportedName ?? newPairing.deviceAddress
             updateUnlockPairing(newPairing)
             pairingError = nil
+            repairNeededFor = nil
             connect()
         } catch {
             pairingError = error.localizedDescription
@@ -931,17 +949,9 @@ final class ControllerModel: ObservableObject {
 #endif
                 switch result {
                 case .failure(let error):
-                    let diagnostic = self.sessionDelegate?.rejectionReason
-                    let failureMessage = diagnostic.map { reason in
-                        reason == "TLS_VERIFY_-67901"
-                        ? String(localized: "电脑证书有效期超出 iOS 限制（\(reason)）。请更新电脑接收器并重新配对。")
-                        : String(localized: "电脑证书校验失败（\(reason)）。请检查电脑接收器的证书并重新配对。")
-                    }
-                    let retryable = Self.mayRetryTransport(error, diagnostic: diagnostic,
-                                                          status: (task.response as? HTTPURLResponse)?.statusCode,
-                                                          closeCode: task.closeCode, authenticated: self.connected)
-                    self.transportFailed(message: failureMessage ?? String(localized: "连接中断。请检查接收器；未确认的文字不会自动重发。"),
-                                         retryable: retryable, generation: currentGeneration)
+                    self.transportError(error, diagnostic: self.sessionDelegate?.rejectionReason,
+                                        status: (task.response as? HTTPURLResponse)?.statusCode,
+                                        closeCode: task.closeCode, generation: currentGeneration)
                 case .success(let message):
                     let data: Data?
                     switch message {
@@ -962,6 +972,28 @@ final class ControllerModel: ObservableObject {
         }
     }
 
+    private func transportError(_ error: Error, diagnostic: String?, status: Int?,
+                                closeCode: URLSessionWebSocketTask.CloseCode, generation currentGeneration: UUID) {
+        guard generation == currentGeneration else { return }
+        if Self.credentialsRejected(diagnostic: diagnostic, status: status) {
+            // The receiver is reachable but no longer accepts this pairing:
+            // stop retrying and offer the scan instead of an endless spinner.
+            let device = selectedDeviceID
+            transportFailed(message: String(localized: "需要重新配对"), retryable: false, generation: currentGeneration)
+            repairNeededFor = device
+            return
+        }
+        let failureMessage = diagnostic.map { reason in
+            reason == "TLS_VERIFY_-67901"
+            ? String(localized: "电脑证书有效期超出 iOS 限制（\(reason)）。请更新电脑接收器并重新配对。")
+            : String(localized: "电脑证书校验失败（\(reason)）。请检查电脑接收器的证书并重新配对。")
+        }
+        let retryable = Self.mayRetryTransport(error, diagnostic: diagnostic, status: status,
+                                              closeCode: closeCode, authenticated: connected)
+        transportFailed(message: failureMessage ?? String(localized: "连接中断。请检查接收器；未确认的文字不会自动重发。"),
+                        retryable: retryable, generation: currentGeneration)
+    }
+
     private func handle(_ message: [String: Any]) -> Bool {
         switch message["type"] as? String {
         case "hello":
@@ -979,6 +1011,7 @@ final class ControllerModel: ObservableObject {
             }
             cancelReconnect()
             automaticReconnectBlocked = false
+            repairNeededFor = nil
             receiverState = state
             inputAvailable = state.inputAvailable
             computerName = name

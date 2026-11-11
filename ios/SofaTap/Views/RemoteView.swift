@@ -31,6 +31,7 @@ struct RemoteView: View {
     @StateObject private var androidTV: AndroidTVController
     @State private var androidSelected: Bool
     @State private var pairingSheet = false
+    @State private var repairScanSheet = false
     @State private var tvRemoteSetupSheet = false
     @State private var tvDirectionSheet = false
     @State private var tvKeyboardFocused = false
@@ -87,7 +88,7 @@ struct RemoteView: View {
     private var tvNavigationSelected: Bool { androidTVSelected && tvMode == .navigation }
     private var currentStatusTitle: String { androidTVSelected ? androidTV.title : televisionSelected ? tv.title : model.statusTitle }
     private var inputSessionAvailable: Bool {
-        scenePhase == .active && !pairingSheet && !guideSheet && !gestureSettingsSheet && !volumeSheet && !deviceSheet &&
+        scenePhase == .active && !pairingSheet && !repairScanSheet && !guideSheet && !gestureSettingsSheet && !volumeSheet && !deviceSheet &&
         !tvRemoteSetupSheet && !showingSpeechError && !resendAlert && !clearAlert
     }
     // The direction sheet contains TV controls; keep its session available while
@@ -175,6 +176,9 @@ struct RemoteView: View {
                         selectTV: selectTelevision, selectComputer: { selectComputer(reconnect: false) },
                         androidSelected: androidTVSelected, incomingLink: $incomingPairingLink)
                 .sofaSheet(.mediumLarge)
+        }
+        .sheet(isPresented: $repairScanSheet) {
+            RepairScanSheet(model: model).sofaSheet(.large)
         }
         .sheet(isPresented: $tvRemoteSetupSheet) {
             AndroidTVRemoteSetupView(tv: androidTV).sofaSheet(.mediumLarge)
@@ -315,6 +319,9 @@ struct RemoteView: View {
         .onChangeCompat(of: tvRemoteSetupSheet) { _, shown in
             if shown { stopInteraction() } else { resumeCurrentInput() }
         }
+        .onChangeCompat(of: repairScanSheet) { _, shown in
+            if shown { stopInteraction() } else { resumeCurrentInput() }
+        }
         .onChangeCompat(of: pairingSheet) { _, shown in
             if shown { stopInteraction() }
             else { resumeCurrentInput() }
@@ -341,7 +348,7 @@ struct RemoteView: View {
             if !model.demo { _ = preferences.save(to: .standard) }
         }
         .onChangeCompat(of: model.pairingError) { _, error in
-            if !televisionSelected && error != nil && !pairingSheet { stopInteraction(); pairingSheet = true }
+            if !televisionSelected && error != nil && !pairingSheet && !repairScanSheet { stopInteraction(); pairingSheet = true }
         }
         .onChangeCompat(of: dictation.errorMessage) { _, error in
             if error != nil { interruptTouch(); showingSpeechError = true }
@@ -630,7 +637,13 @@ struct RemoteView: View {
 
     private var touchpad: some View {
         ZStack {
-            if showsAirMouse {
+            if model.needsRepairing && !televisionSelected {
+                // Receiver refused this pairing: the stone area becomes the way back.
+                RepairPairingPanel(stoneAsset: model.airMouseAppearance.stone.assetName) { repairScanSheet = true }
+                    .padding(.top, Self.headerHeight)
+                    .padding(.bottom, Self.barReserve + 16)
+                    .transition(.opacity)
+            } else if showsAirMouse {
                 // 16 pt of dead space above the bottom bar so a blind thumb
                 // does not slide from the stone onto a button.
                 AirMouseView(model: model)
@@ -673,7 +686,7 @@ struct RemoteView: View {
                         }
                     }
                 }
-            } else if !showsAirMouse {
+            } else if !showsAirMouse && !model.needsRepairing {
                 // Air mouse owns the whole card; a scroll strip there would steal blind drags.
                 GeometryReader { geometry in
                     edgeScrollStrip
@@ -1568,3 +1581,90 @@ private struct DesktopShortcutPanel: View {
     }
 }
 #endif
+
+/// Jony spec: shown only when the receiver explicitly refuses this pairing.
+/// Sand background (inherited), the user's stone at 40 %, ink title, mute
+/// explanation, one accent primary button. No red, no error icon.
+struct RepairPairingPanel: View {
+    let stoneAsset: String
+    let scan: () -> Void
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            Image(stoneAsset)
+                .resizable().scaledToFit()
+                .frame(width: Kare.isSmallScreen ? 180 : 230)
+                .opacity(0.4)
+                .accessibilityHidden(true)
+            Text(String(localized: "需要重新配对"))
+                .font(.custom("PingFangSC-Semibold", size: 17, relativeTo: .headline))
+                .foregroundStyle(Kare.ink)
+                .multilineTextAlignment(.center)
+                .padding(.top, 16)
+                .accessibilityIdentifier("repairPairingTitle")
+            Text(String(localized: "在 Mac 上打开 Sofatap，扫一下屏幕上的二维码"))
+                .font(.custom("PingFangSC-Regular", size: 13, relativeTo: .footnote))
+                .foregroundStyle(Kare.mute)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 6)
+                .padding(.horizontal, 32)
+            Spacer(minLength: 16)
+            Button(action: scan) {
+                Text(String(localized: "扫码配对"))
+                    .font(.custom("PingFangSC-Semibold", size: 17, relativeTo: .headline))
+                    .foregroundStyle(Kare.sand)
+                    .frame(maxWidth: .infinity, minHeight: 44, maxHeight: 44)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Kare.accent))
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 16)
+            .accessibilityIdentifier("repairPairingScan")
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("repairPairing")
+    }
+}
+
+/// Opens straight into the camera. A valid SofaTap computer code is saved,
+/// confirmed with a light haptic and the sheet closes back to the page the
+/// user was on; there is no success page. Other QR codes are ignored.
+private struct RepairScanSheet: View {
+    @ObservedObject var model: ControllerModel
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var cameraError: String?
+    @State private var done = false
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Kare.sand.ignoresSafeArea()
+            QRScanner(isActive: !done && scenePhase == .active,
+                      accepts: { (try? Pairing.parse($0)) != nil },
+                      onScan: accept, onError: { cameraError = $0 })
+                .ignoresSafeArea()
+                .accessibilityLabel(String(localized: "扫描二维码"))
+            VStack(spacing: 10) {
+                if let message = cameraError ?? model.pairingError {
+                    Text(message).font(.footnote).foregroundStyle(Kare.ink)
+                        .multilineTextAlignment(.center).padding(12)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(Kare.sand.opacity(0.92)))
+                }
+                Button(String(localized: "取消")) { dismiss() }
+                    .font(.system(size: 17)).foregroundStyle(Kare.accent)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Kare.sand.opacity(0.92)))
+            }
+            .padding(16)
+        }
+    }
+    private func accept(_ raw: String) {
+        guard !done else { return }
+        model.acceptPairing(raw)
+        guard model.pairingError == nil else { return }
+        done = true
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        dismiss()
+    }
+}

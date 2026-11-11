@@ -30,9 +30,14 @@ public sealed class Credentials : IDisposable
     { Token = token; Certificate = certificate; _lock = fileLock; }
     public static string DefaultDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SofaTap");
 
-    public static Credentials LoadOrCreate(string directory) => LoadOrCreate(directory, NetworkAddresses.LocalIPv4());
+    public static Credentials LoadOrCreate(string directory, bool resetPairing = false) =>
+        LoadOrCreate(directory, NetworkAddresses.LocalIPv4(), resetPairing);
 
-    internal static Credentials LoadOrCreate(string directory, IReadOnlyCollection<string> localAddresses)
+    /// The pairing identity (TLS leaf + bearer token) is deliberately independent
+    /// of the current network. Phones pin the DER leaf fingerprint, so adapters,
+    /// DHCP leases and VPNs may come and go without a new QR scan. Only an explicit
+    /// reset, an unreadable/corrupt profile, or an expiring certificate renews it.
+    internal static Credentials LoadOrCreate(string directory, IReadOnlyCollection<string> localAddresses, bool resetPairing = false)
     {
         Directory.CreateDirectory(directory);
         if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
@@ -44,42 +49,40 @@ public sealed class Credentials : IDisposable
         try
         {
             var path = Path.Combine(directory, "pairing.dat");
-            Secret secret;
+            Secret? secret = null;
             X509Certificate2? loaded = null;
-            if (File.Exists(path))
+            if (resetPairing) Console.Error.WriteLine("Pairing reset requested. Scan the new pairing QR on the iPhone.");
+            else if (File.Exists(path))
             {
-                var stored = File.ReadAllBytes(path);
-                var clear = OperatingSystem.IsWindows() ? Dpapi.Unprotect(stored) : stored;
-                try { secret = JsonSerializer.Deserialize<Secret>(clear) ?? throw new InvalidDataException("Invalid pairing profile."); }
-                finally { CryptographicOperations.ZeroMemory(clear); }
-                if (secret.Token.Length != 43 || secret.Token.Any(c => !(char.IsAsciiLetterOrDigit(c) || c is '-' or '_')))
-                    throw new InvalidDataException("Invalid pairing profile. Use a new data directory to pair again.");
-                loaded = LoadCertificate(secret);
-                var certificateIPs = loaded.Extensions.OfType<X509SubjectAlternativeNameExtension>()
-                    .SelectMany(extension => extension.EnumerateIPAddresses())
-                    .Where(address => address.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(address))
-                    .Select(address => address.ToString()).ToHashSet(StringComparer.Ordinal);
-                var currentIPs = localAddresses.ToHashSet(StringComparer.Ordinal);
-                // Pure additions (for example a VPN adapter), pure removals and
-                // offline restarts retain the paired TLS leaf and bearer token.
-                // A replacement address still needs a new certificate even when
-                // another address, such as a stable VPN endpoint, remains present.
-                // NativeState advertises only addresses covered by this certificate.
-                var hasNewAddress = currentIPs.Any(address => !certificateIPs.Contains(address));
-                var networkChanged = hasNewAddress && (certificateIPs.Count == 0
-                    || certificateIPs.Any(address => !currentIPs.Contains(address)));
-                if (!loaded.HasPrivateKey || loaded.NotAfter.ToUniversalTime() < DateTime.UtcNow.AddDays(30)
-                    || loaded.NotAfter.ToUniversalTime() - loaded.NotBefore.ToUniversalTime() > TimeSpan.FromDays(366)
-                    || networkChanged)
+                try
                 {
-                    loaded.Dispose(); loaded = null;
-                    // An address replacement still needs a new SAN-bound
-                    // certificate and explicit pairing; never relax TLS validation.
-                    secret = CreateSecret(localAddresses); SaveSecret(path, secret);
-                    Console.Error.WriteLine("Local network identity changed or certificate renewed. Scan the pairing QR again on the iPhone.");
+                    var stored = File.ReadAllBytes(path);
+                    var clear = OperatingSystem.IsWindows() ? Dpapi.Unprotect(stored) : stored;
+                    try { secret = JsonSerializer.Deserialize<Secret>(clear) ?? throw new InvalidDataException("Invalid pairing profile."); }
+                    finally { CryptographicOperations.ZeroMemory(clear); }
+                    if (secret.Token is null || secret.Pfx is null || secret.Token.Length != 43
+                        || secret.Token.Any(c => !(char.IsAsciiLetterOrDigit(c) || c is '-' or '_')))
+                        throw new InvalidDataException("Invalid pairing profile.");
+                    loaded = LoadCertificate(secret);
+                    if (!loaded.HasPrivateKey) throw new InvalidDataException("Pairing certificate has no private key.");
+                }
+                catch (Exception error) when (error is InvalidDataException or JsonException or FormatException or CryptographicException or ArgumentException)
+                {
+                    // Corrupt profile: keep the unreadable bytes for diagnosis and pair again.
+                    loaded?.Dispose(); loaded = null; secret = null;
+                    var backup = path + ".corrupt-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+                    try { File.Copy(path, backup, true); } catch (IOException) { }
+                    Console.Error.WriteLine("Pairing profile was unreadable. Scan the new pairing QR on the iPhone.");
+                }
+                if (loaded is not null && (loaded.NotAfter.ToUniversalTime() < DateTime.UtcNow.AddDays(30)
+                    || loaded.NotAfter.ToUniversalTime() - loaded.NotBefore.ToUniversalTime() > TimeSpan.FromDays(366)))
+                {
+                    // iOS rejects expired or over-long leaves even when pinned.
+                    loaded.Dispose(); loaded = null; secret = null;
+                    Console.Error.WriteLine("Pairing certificate renewed before expiry. Scan the pairing QR again on the iPhone.");
                 }
             }
-            else { secret = CreateSecret(localAddresses); SaveSecret(path, secret); }
+            if (secret is null) { secret = CreateSecret(localAddresses); SaveSecret(path, secret); }
             loaded ??= LoadCertificate(secret);
             return new(secret.Token, loaded, fileLock);
         }
