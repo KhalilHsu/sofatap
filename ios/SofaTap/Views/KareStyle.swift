@@ -288,6 +288,21 @@ struct DeliveryNoticeRow: View {
     let font: Font
     let actions: [Action]
     var disabled = false
+    @State private var rowWidth: CGFloat = 0
+
+    /// iOS 15 (iPhone 7) has no Layout protocol: measure with UIKit at the row
+    /// width instead. Same rule as NoticeWrapLayout.
+    private var legacyWraps: Bool {
+        guard rowWidth > 0 else { return false }
+        let body = UIFont.systemFont(ofSize: 13), bold = UIFont.systemFont(ofSize: 13, weight: .semibold)
+        let buttonsWidth = actions.map { ceil(($0.title as NSString).size(withAttributes: [.font: bold]).width) }.reduce(0, +)
+            + 14 * CGFloat(max(0, actions.count - 1))
+        let inlineWidth = max(1, rowWidth - buttonsWidth - 14)
+        let needed = (message as NSString).boundingRect(with: CGSize(width: inlineWidth, height: .greatestFiniteMagnitude),
+                                                        options: [.usesLineFragmentOrigin, .usesFontLeading],
+                                                        attributes: [.font: body], context: nil).height
+        return needed > body.lineHeight * 2 + 1
+    }
 
     private var buttons: some View {
         HStack(alignment: .firstTextBaseline, spacing: 14) {
@@ -317,13 +332,32 @@ struct DeliveryNoticeRow: View {
 
     var body: some View {
         Group {
-            if actions.count >= 2 {
+            if actions.count >= 2, #available(iOS 16.0, *) {
                 NoticeWrapLayout(spacing: 14) {
                     Text(message).font(font).lineLimit(nil).fixedSize(horizontal: false, vertical: true).hidden().accessibilityHidden(true)
                     Text("Ag").font(font).lineLimit(1).fixedSize().hidden().accessibilityHidden(true)
                     label
                     buttons
                 }
+            } else if actions.count >= 2 {
+                Group {
+                    if legacyWraps {
+                        VStack(alignment: .trailing, spacing: 0) {
+                            label.frame(maxWidth: .infinity, alignment: .leading)
+                            buttons
+                        }
+                    } else {
+                        HStack(alignment: .firstTextBaseline, spacing: 14) {
+                            label.frame(maxWidth: .infinity, alignment: .leading)
+                            buttons.layoutPriority(1)
+                        }
+                    }
+                }
+                .background(GeometryReader { geometry in
+                    Color.clear
+                        .onAppear { rowWidth = geometry.size.width }
+                        .onChange(of: geometry.size.width) { rowWidth = $0 }
+                })
             } else {
                 HStack(alignment: .firstTextBaseline, spacing: 14) {
                     label.frame(maxWidth: .infinity, alignment: .leading)
@@ -337,6 +371,7 @@ struct DeliveryNoticeRow: View {
 }
 
 /// Subviews: [unlimited measuring text (hidden), one-line reference (hidden), label, buttons].
+@available(iOS 16.0, *)
 struct NoticeWrapLayout: Layout {
     var spacing: CGFloat
     struct Plan { var inline: Bool; var labelSize: CGSize; var buttonSize: CGSize }
